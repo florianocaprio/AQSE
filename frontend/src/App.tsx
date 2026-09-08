@@ -1,155 +1,81 @@
-import { useEffect, useState } from "react";
+import { useEffect, type JSX } from "react";
 
-import { QuantumCircuitControls } from "./components/QuantumCircuitControls";
-import { SensorSimulator } from "./components/SensorSimulator";
-import type { HealthResponse, QuantumHealthResponse } from "./types";
+import { WorkbookNavigation } from "./app/WorkbookNavigation";
+import { WORKSHEETS } from "./app/worksheetRegistry";
+import { useWorkbench } from "./state/workbench";
+import {
+  useNetworkStream,
+  useWorkbenchBootstrap,
+} from "./state/useWorkbenchController";
+import type { WorksheetId } from "./types/workbench";
+import { AfseWorksheet } from "./worksheets/AfseWorksheet";
+import { ExperimentsWorksheet } from "./worksheets/ExperimentsWorksheet";
+import { FeaturesWorksheet } from "./worksheets/FeaturesWorksheet";
+import { NeuralWorksheet } from "./worksheets/NeuralWorksheet";
+import { OverviewWorksheet } from "./worksheets/OverviewWorksheet";
+import { QngWorksheet } from "./worksheets/QngWorksheet";
+import { QuantumWorksheet } from "./worksheets/QuantumWorksheet";
+import { SensorsWorksheet } from "./worksheets/SensorsWorksheet";
 
-function App() {
-  const [backend, setBackend] = useState<HealthResponse | null>(null);
-  const [quantum, setQuantum] = useState<QuantumHealthResponse | null>(null);
-  const [backendError, setBackendError] = useState(false);
-  const [quantumError, setQuantumError] = useState(false);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    void fetch("/api/health", { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error("Backend unavailable");
-        return response.json() as Promise<HealthResponse>;
-      })
-      .then((payload) => {
-        setBackend(payload);
-        setBackendError(false);
-      })
-      .catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
-          setBackendError(true);
-        }
-      });
-
-    void fetch("/api/quantum/health", { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error("Quantum engine unavailable");
-        return response.json() as Promise<QuantumHealthResponse>;
-      })
-      .then((payload) => {
-        setQuantum(payload);
-        setQuantumError(false);
-      })
-      .catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
-          setQuantumError(true);
-        }
-      });
-
-    return () => controller.abort();
-  }, []);
-
-  const statusLabel = (ready: boolean, failed: boolean) =>
-    failed ? "UNAVAILABLE" : ready ? "READY" : "CHECKING";
-
-  return (
-    <main className="app-shell">
-      <header className="hero">
-        <div className="hero-copy">
-          <p className="eyebrow">AQSE · LOCAL RESEARCH DEMONSTRATOR</p>
-          <h1>AQSE — Adaptive Quantum Sensor Engine</h1>
-          <p className="summary">
-            Milestone 1B workspace for synthetic sensor acquisition and
-            infrastructure inspection. No sensor data is sent to the quantum
-            engine.
-          </p>
-        </div>
-        <div className="milestone-tag" aria-label="Current milestone">
-          <span>MILESTONE</span>
-          <strong>1B</strong>
-          <small>Sensor simulation</small>
-        </div>
-      </header>
-
-      <section className="system-section" aria-labelledby="system-status-heading">
-        <div className="system-heading">
-          <div>
-            <p className="section-index">SYSTEM</p>
-            <h2 id="system-status-heading">Environment status</h2>
-          </div>
-          <p>Local Docker services and validated quantum infrastructure</p>
-        </div>
-        <div aria-live="polite" className="status-panel">
-          <StatusRow
-            label="Backend"
-            detail={backend?.service}
-            value={statusLabel(backend?.status === "ok", backendError)}
-            unavailable={backendError}
-          />
-          <StatusRow
-            label="Quantum Engine"
-            detail={quantum?.engine}
-            value={statusLabel(quantum?.status === "ok", quantumError)}
-            unavailable={quantumError}
-          />
-          <StatusRow
-            label="Qiskit"
-            detail={quantum?.simulation}
-            value={statusLabel(quantum?.qiskit === "ready", quantumError)}
-            unavailable={quantumError}
-          />
-          <StatusRow label="Qubits" value={quantum?.qubits ?? "—"} />
-          <StatusRow label="Features" value={quantum?.features ?? "—"} />
-          <StatusRow
-            label="Trainable parameters"
-            value={quantum?.trainable_parameters ?? "—"}
-          />
-          <StatusRow
-            label="Sensor Simulator"
-            detail="Quantum magnetometer"
-            value={statusLabel(backend?.status === "ok", backendError)}
-            unavailable={backendError}
-          />
-          <StatusRow label="AFSE Embedding" value="NOT IMPLEMENTED" muted />
-        </div>
-      </section>
-
-      <SensorSimulator />
-      <QuantumCircuitControls />
-
-      <footer>
-        <span>AQSE Milestone 1B</span>
-        <span>Local simulation only · No QPU execution</span>
-      </footer>
-    </main>
-  );
-}
-
-type StatusRowProps = {
-  label: string;
-  value: string | number;
-  detail?: string;
-  unavailable?: boolean;
-  muted?: boolean;
+const WORKSHEET_COMPONENTS: Record<WorksheetId, () => JSX.Element> = {
+  overview: OverviewWorksheet,
+  sensors: SensorsWorksheet,
+  features: FeaturesWorksheet,
+  quantum: QuantumWorksheet,
+  qng: QngWorksheet,
+  afse: AfseWorksheet,
+  neural: NeuralWorksheet,
+  experiments: ExperimentsWorksheet,
 };
 
-function StatusRow({
-  label,
-  value,
-  detail,
-  unavailable = false,
-  muted = false,
-}: StatusRowProps) {
-  const className = unavailable
-    ? "status-value error"
-    : muted
-      ? "status-value muted"
-      : "status-value";
+function App() {
+  const { state, dispatch } = useWorkbench();
+  useWorkbenchBootstrap();
+  useNetworkStream();
+  const ActiveWorksheet = WORKSHEET_COMPONENTS[state.active_worksheet];
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const candidate = window.location.hash.replace(/^#\/?/, "") as WorksheetId;
+      if (WORKSHEETS.some(({ id }) => id === candidate)) {
+        dispatch({ type: "NAVIGATE", worksheet: candidate });
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [dispatch]);
+
+  const navigate = (worksheet: WorksheetId) => {
+    window.location.hash = `/${worksheet}`;
+    dispatch({ type: "NAVIGATE", worksheet });
+    window.scrollTo({ top: 0, behavior: "auto" });
+  };
 
   return (
-    <div className="status-row">
-      <span className="status-label">
-        {label}
-        {detail && <small>{detail}</small>}
-      </span>
-      <strong className={className}>{value}</strong>
+    <div className="workbook-shell">
+      <a className="skip-link" href="#worksheet-content">Skip to worksheet</a>
+      <WorkbookNavigation active={state.active_worksheet} onNavigate={navigate} />
+      <div className="workbook-main">
+        <header className="workbook-topbar">
+          <div>
+            <span className="workbook-project">AQSE</span>
+            <span>Adaptive Quantum Sensor Engine</span>
+          </div>
+          <div className="topbar-status" aria-label="Current environment status">
+            <span className={`status-dot ${state.backend_health.status}`} />
+            <span>Backend {state.backend_health.status}</span>
+            <i aria-hidden="true" />
+            <span>Milestone 1C</span>
+          </div>
+        </header>
+        <main id="worksheet-content" tabIndex={-1}>
+          <ActiveWorksheet />
+        </main>
+        <footer className="workbook-footer">
+          <span>AQSE local research workbench · Milestone 1C</span>
+          <span>No physical QPU · no AFSE math · no neural output</span>
+        </footer>
+      </div>
     </div>
   );
 }

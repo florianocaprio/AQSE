@@ -1,47 +1,109 @@
 # AQSE — Adaptive Quantum Sensor Engine
 
-AQSE è un dimostratore locale per una pipeline ibrida di elaborazione classica/quantistica applicata a sensori quantistici. Il Milestone 1A integra e valida l’implementazione TQK8 fornita da Floriano; il Milestone 1B aggiunge un magnetometro quantistico sintetico configurabile e l’estrazione di otto feature interpretabili.
+AQSE è un banco di prova locale per una pipeline ibrida classica/quantistica applicata a sensori quantistici. Il Milestone 1C rende navigabile una catena controllata: campo sintetico ideale → rete di magnetometri → osservazioni degradate → feature interpretabili → codifica angolare → confronto VQC/TQK a parametri fissi.
 
-## Responsabilità scientifica
+Il progetto è un dimostratore software, non un modello certificato di uno strumento commerciale e non una validazione sperimentale.
 
-Il circuito VQC, il fidelity kernel TQK, la loss di centered kernel alignment, l’ottimizzazione QNG, le derivate di stato, la metrica di Fubini–Study e le formule di campionamento e budget sono codice scientifico controllato dall’autore. I file in `backend/app/quantum/user_pipeline/` sono conservati senza modifiche algoritmiche e non devono essere ridisegnati senza istruzioni esplicite.
+## Perimetro scientifico
 
-Il contratto corrente usa 8 feature generiche `f0..f7`, 8 qubit logici, 16 parametri addestrabili e 7 porte CZ. Le etichette `-1/+1` appartengono esclusivamente alla demo binaria inclusa e non definiscono i futuri task sensoriali AQSE.
+Il circuito VQC, il fidelity kernel TQK, la loss di centered kernel alignment, l'ottimizzazione QNG, le derivate di stato, la metrica di Fubini–Study e le formule di campionamento e budget sono codice scientifico controllato dall'autore. I sorgenti originali in `backend/app/quantum/user_pipeline/` e i relativi test non vengono ridisegnati né ottimizzati senza istruzioni esplicite.
+
+Stato corrente:
+
+- il simulatore vettoriale e la rete continua da 1 a 8 nodi sono implementati;
+- l'estrazione finestrata delle otto feature è implementata;
+- la preview locale usa `AngleScaler`, il VQC fornito e il TQK a **theta fisso**;
+- la modalità self-reference è esclusivamente esplorativa, non una valutazione predittiva;
+- il QNG scientifico esiste nel codice dell'autore, ma il training sui dati sensoriali non è collegato;
+- AFSE ha soltanto un confine architetturale: la matematica non è implementata;
+- rete neurale, output engine e QPU fisica non sono implementati;
+- non vengono inventati VQC, kernel, loss, QNG o algoritmi AQSE aggiuntivi.
 
 ## Architettura
 
-- `frontend`: dashboard tecnica React, TypeScript e Vite per stato ambiente,
-  configurazione del simulatore e ispezione dei risultati.
-- `backend`: API REST Python e FastAPI.
-- `backend/app/quantum/adapter.py`: adapter applicativo per i motori statevector Qiskit e NumPy.
-- `backend/app/quantum/user_pipeline/`: implementazione scientifica TQK8 fornita dall’autore.
-- `backend/app/sensors/`: contratti generici e modello del magnetometro simulato.
-- `backend/app/preprocessing/`: analisi spettrale ed estrazione delle feature.
-- `backend/tests/quantum/`: test numerici originali di Floriano.
-- `docs/`: notebook, documentazione scientifica, sensori e risultati di validazione.
+```text
+Synthetic field providers
+          │
+          ▼
+1–8 vector magnetometers ──► observation stream (REST + SSE)
+          │                            │
+          └──► separate truth API      ▼
+                                  causal windows
+                                        │
+                                        ▼
+                              8 observable features
+                                        │
+                                        ▼
+                              reference-fit AngleScaler
+                                        │
+                                        ▼
+                         fixed-theta VQC / TQK preview
+```
 
-QNG è feedback di training, non uno stadio di inferenza. Il Milestone 1B non introduce un embedding persistente o AFSE e non collega ancora le feature del sensore al motore quantistico.
+- `backend/`: Python 3.12, FastAPI, Pydantic, NumPy, Qiskit e test pytest.
+- `frontend/`: React, TypeScript, Vite e una GUI tecnica in inglese.
+- `backend/app/network/`: fisica sintetica, moto, sensori, sessioni, eventi, buffer, SSE e osservabilità.
+- `backend/app/features/`: estrazione finestrata, qualità e provenienza delle feature.
+- `backend/app/quantum/preview.py`: adapter applicativo limitato per la preview a theta fisso.
+- `backend/app/quantum/user_pipeline/`: implementazione scientifica fornita dall'autore.
+- `docs/`: contratti, limiti scientifici e piano di validazione.
 
-## Simulatore magnetometro
+REST gestisce configurazione, controllo e interrogazione. Lo stream di osservazioni usa Server-Sent Events; il confine applicativo mantiene identificativi, cursori e payload versionati, così da permettere una futura evoluzione verso WebSocket senza accoppiare il simulatore al trasporto.
 
-Il simulatore genera una serie temporale in nanotesla composta da campo di fondo, sinusoide, drift lineare, rumore gaussiano e un transiente opzionale. I seed rendono la componente stocastica ripetibile. Non riproduce uno strumento commerciale e non dichiara accuratezza sperimentale.
+## Simulazione sensoriale
 
-L’estrattore restituisce, senza normalizzazione, il vettore ordinato:
+Il backend supporta sia una simulazione vettoriale finita sia sessioni continue in memoria:
+
+- 1–8 nodi con ruolo `sensor` o `remote_reference`;
+- misura vettoriale, monoassiale o total-field;
+- frame NED e quaternion `wxyz` world-to-sensor;
+- campo uniforme, rumore OU comune, gradiente simmetrico a traccia nulla, dipoli puntiformi, anomalie Gaussiane e campi periodici;
+- moto statico, tumble, high-dynamic, lineare, attraversamento anomalia e combinato;
+- catena strumentale configurabile con disallineamento, cross-axis, soft-iron, gain, bias, drift, temperatura, banda, rumore bianco e saturazione;
+- eventi distinti dal rumore: offset del campo, bias/drift del nodo, noise burst, offset strumentale condiviso, dropout e stuck sensor;
+- seed e stream casuali separati per riproducibilità;
+- sessioni `start`, `pause`, `resume`, `stop`, `reset`, `replay` e avanzamento deterministico `step`;
+- buffer circolare limitato, cursor gap esplicito e SSE con `Last-Event-ID`.
+
+Le unità interne e API sono SI: tesla, metri, secondi, kelvin, A·m² e T/m. La GUI converte in unità più leggibili dove indicato.
+
+### Osservazioni e verità
+
+Le osservazioni contengono soltanto ciò che il sensore renderebbe disponibile: misura, metadati osservabili, validità e flag non rivelatori. La generator truth è esposta da endpoint separati e può essere nascosta dalla modalità blind della GUI. Dropout e valori mancanti sono `null`; non vengono sostituiti con zeri o NaN serializzati.
+
+La quantizzazione ADC e il trasporto di rete fisico non sono modellati in questo milestone. Le sessioni sono locali, in memoria e non persistono al riavvio del backend.
+
+## Feature e preview quantistica
+
+L'estrattore opera su finestre causali complete e restituisce, nello stesso ordine del contratto TQK8:
 
 ```text
 [amplitude, phase, frequency, variance, drift, snr, spectral_peak, temperature]
 ```
 
-Ampiezza, fase, frequenza, varianza, drift, SNR e picco spettrale sono stimati dal segnale; solo la temperatura proviene dai metadati di acquisizione. Formule, unità, convenzioni numeriche e limiti sono descritti in [`docs/sensors/magnetometer.md`](docs/sensors/magnetometer.md).
+Il canale può essere X, Y, Z o magnitudine. Il profilo implementato usa di default finestre da 1 s con sovrapposizione del 50%; un profilo continuo 4 s / hop 1 s è documentato come candidato, non come implementazione separata. Le soglie di qualità v1 sono fisse e verificabili: almeno due cicli, prominenza spettrale minima di 6 dB, SNR minimo di 0 dB e nessun campione saturo.
 
-## Motori locali
+Ogni riga è firmata dal backend con provenienza effimera. La preview rifiuta righe alterate, reference bank degenere, leakage temporale e richieste oltre il limite. Lo scaler è adattato soltanto sul reference set. Sono disponibili:
 
-L’adapter espone due backend esatti:
+- `self_reference`: Gram matrix interna, marcata **SELF-REFERENCE — EXPLORATORY**;
+- `reference_query`: confronto di finestre query future contro un reference bank causale precedente.
 
-- Qiskit `Statevector`, usato come motore integrato;
-- simulatore di stato NumPy indipendente, usato come riferimento numerico.
+Il calcolo usa statevector esatti locali Qiskit o NumPy. Non usa Aer, non configura credenziali IBM e non contatta una QPU.
 
-Non è installato `qiskit-ibm-runtime`, non vengono configurate credenziali IBM e nessun endpoint contatta una QPU. Qiskit Aer non è necessario per questa implementazione.
+## GUI del workbench
+
+La pagina è una prima interfaccia tecnica, non il design finale di AQSE. Le otto worksheet sono:
+
+1. Overview
+2. Sensors
+3. Features
+4. Quantum
+5. QNG
+6. AFSE
+7. Neural
+8. Experiments
+
+La GUI consente di scegliere preset, modificare la geometria e i parametri dei sensori, importare/esportare configurazioni JSON, avviare o avanzare una sessione, osservare i segnali, estrarre feature e modificare i 16 parametri theta inviati alla preview. L'import sostituisce soltanto il draft e non crea una sessione automaticamente. Modificare una configurazione rende esplicitamente stale i risultati dipendenti. QNG, AFSE e Neural mostrano soltanto lo stato reale del progetto e non generano metriche simulate.
 
 ## Prerequisiti
 
@@ -49,7 +111,7 @@ Non è installato `qiskit-ibm-runtime`, non vengono configurate credenziali IBM 
 - Docker Desktop con Docker Compose v2;
 - `make`.
 
-Docker usa l’architettura nativa dell’host e non forza `linux/amd64`. Node.js e Python locali non sono necessari per il flusso Docker.
+Docker usa l'architettura nativa dell'host e non forza `linux/amd64`. Il flusso standard non richiede Python o Node.js installati localmente.
 
 ## Avvio locale
 
@@ -59,85 +121,104 @@ make build
 make up
 ```
 
-Servizi disponibili:
+I bind mount e i processi di reload automatico rendono disponibili le modifiche locali senza ricostruire l'immagine a ogni salvataggio. Non inserire segreti nel file `.env` e non commetterlo.
 
 | Risorsa | URL |
 | --- | --- |
 | Frontend | `http://localhost:3000` |
 | Backend health | `http://localhost:8000/api/health` |
 | Quantum infrastructure health | `http://localhost:8000/api/quantum/health` |
-| Sensor catalog | `http://localhost:8000/api/sensors` |
-| Magnetometer defaults | `http://localhost:8000/api/sensors/magnetometer/defaults` |
-| FastAPI docs | `http://localhost:8000/docs` |
+| Workbench capabilities | `http://localhost:8000/api/workbench/capabilities` |
+| Network health | `http://localhost:8000/api/network/health` |
+| Network presets | `http://localhost:8000/api/network/presets` |
+| Field providers | `http://localhost:8000/api/network/field-providers` |
+| VQC descriptor | `http://localhost:8000/api/quantum/circuit` |
+| OpenAPI | `http://localhost:8000/openapi.json` |
+| FastAPI documentation | `http://localhost:8000/docs` |
 
-Il frontend inoltra `/api` al backend tramite il proxy Vite. Le porte possono essere cambiate nel file `.env` a partire da `.env.example`.
+Le porte e il target del proxy Vite possono essere modificati partendo da `.env.example`.
+Le porte sono pubblicate soltanto sull'interfaccia loopback `127.0.0.1`; il banco
+non espone servizi alla rete locale per impostazione predefinita.
 
-## Verifica
+### Percorso demo consigliato
+
+1. Aprire la worksheet **Sensors** e caricare il preset `Quantum preview signal`.
+2. Creare una sessione e generare un numero di campioni sufficiente per più finestre complete.
+3. In **Features**, scegliere il sensore e il canale, quindi estrarre le feature.
+4. In **Quantum**, verificare tabella raw/encoded, theta e backend esatto.
+5. Eseguire prima la preview self-reference esplorativa, oppure creare una separazione causale reference/query.
+6. Salvare o reimportare la configurazione, oppure esportare feature ed esperimenti, dalla worksheet **Experiments**.
+
+Per la simulazione verticale sono disponibili anche `Eight-node causal event demo`,
+con sorgente mobile e cause componibili, e `Single-sensor ambiguity control`, con
+due fasi di uguale offset ma diversa origine. Le cause appartengono esclusivamente
+al canale truth e non sono presentate come diagnosi del modello.
+
+## Comandi di sviluppo
+
+- `make build`: costruisce entrambe le immagini Docker.
+- `make up`: avvia backend e frontend in background.
+- `make down`: arresta i servizi senza rimuovere dati estranei al progetto.
+- `make logs`: segue i log di entrambi i servizi.
+- `make test`: esegue pytest, Ruff, typecheck, ESLint, Vitest e build Vite.
+- `make soak`: esegue il soak test continuo predefinito da 20 minuti su 8 nodi.
+- `make clean`: arresta i servizi e rimuove soltanto cache/output locali generati.
+
+Durata e numero di nodi del soak sono sovrascrivibili:
+
+```sh
+SOAK_DURATION_SECONDS=60 SOAK_NODE_COUNT=4 SOAK_SEED=42 make soak
+```
+
+## Verifica manuale essenziale
 
 ```sh
 make test
 curl --fail http://localhost:8000/api/health
 curl --fail http://localhost:8000/api/quantum/health
-curl --fail http://localhost:8000/api/sensors
-curl --fail http://localhost:8000/api/sensors/magnetometer/defaults
+curl --fail http://localhost:8000/api/network/health
+curl --fail http://localhost:8000/api/network/presets
 curl --fail http://localhost:3000
 ```
 
-`make test` esegue l’intera suite backend, inclusi gli otto test numerici originali con i cross-check Qiskit attivi e i test deterministici del sensore, quindi la build TypeScript/Vite del frontend. Il quantum health endpoint esegue unicamente un piccolo smoke test deterministico di infrastruttura: costruisce il VQC, verifica i conteggi strutturali e confronta uno stato Qiskit con il riferimento NumPy. Non addestra alcun modello e non restituisce statevector.
+Il quantum health endpoint è soltanto uno smoke test deterministico di infrastruttura. Costruisce il VQC, ne controlla la struttura e confronta il risultato Qiskit con il riferimento NumPy; non addestra alcun modello e non restituisce lo statevector.
 
-Il report riproducibile del Milestone 1B è in [`docs/validation/milestone-1b.md`](docs/validation/milestone-1b.md).
+Il piano riproducibile è in `docs/validation/milestone-1c-validation-plan.md`; i comandi realmente eseguiti, i risultati misurati e i limiti osservati sono registrati in `docs/validation/milestone-1c.md`.
 
-Esempio di simulazione:
-
-```sh
-curl --fail \
-  --header 'Content-Type: application/json' \
-  --data '{"duration":2,"sampling_rate":200,"frequency":8,"random_seed":42}' \
-  http://localhost:8000/api/sensors/magnetometer/simulate
-```
-
-La pagina frontend permette di configurare il simulatore, visualizzare segnale e spettro e ispezionare le otto feature. Contiene inoltre una bozza locale modificabile dei 16 parametri `θ0…θ15`: quei valori rimangono nella memoria del browser e non vengono inviati o applicati al circuito in questo milestone.
-
-## Struttura
+## Struttura principale
 
 ```text
 AQSE/
 ├── backend/
 │   ├── app/
 │   │   ├── api/
-│   │   ├── models/
-│   │   ├── pipeline/
+│   │   ├── features/
+│   │   ├── network/
 │   │   ├── preprocessing/
 │   │   ├── sensors/
-│   │   │   ├── magnetometer.py
-│   │   │   └── models.py
 │   │   └── quantum/
-│   │       ├── adapter.py
-│   │       ├── engine.py
 │   │       └── user_pipeline/
-│   │           ├── sampler_qng.py
-│   │           └── tqk8.py
+│   ├── scripts/
 │   └── tests/
-│       ├── data/
-│       └── quantum/
 ├── frontend/
+│   └── src/
+│       ├── api/
+│       ├── app/
+│       ├── components/
+│       ├── diagrams/
+│       ├── state/
+│       ├── types/
+│       └── worksheets/
 ├── docs/
-│   ├── notebooks/
+│   ├── architecture/
+│   ├── features/
 │   ├── quantum/
 │   ├── sensors/
-│   └── validation/tqk8/
+│   └── validation/
 ├── docker-compose.yml
 ├── Makefile
+├── .env.example
 └── README.md
 ```
 
-## Comandi
-
-- `make build`: costruisce entrambe le immagini.
-- `make up`: avvia i servizi in background.
-- `make down`: arresta i servizi.
-- `make logs`: segue i log.
-- `make test`: esegue test backend e build frontend.
-- `make clean`: arresta i servizi e rimuove soltanto cache e output locali generati.
-
-Il file ZIP sorgente rimane in `incoming/`, directory esclusa da Git, e non deve essere committato.
+Il file ZIP sorgente resta in `incoming/`, directory esclusa da Git. Sono esclusi anche `.env`, `node_modules`, build, cache, log e artefatti runtime.
