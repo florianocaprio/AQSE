@@ -13,7 +13,7 @@ logs:
 	docker compose logs -f
 
 test: build
-	docker compose run --rm backend python -m pytest
+	docker compose run --rm -v ./docker-compose.yml:/workspace/docker-compose.yml:ro backend python -m pytest
 	docker compose run --rm backend ruff check .
 	docker compose run --rm --no-deps frontend sh -c "CI=true pnpm install --frozen-lockfile && pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run build"
 

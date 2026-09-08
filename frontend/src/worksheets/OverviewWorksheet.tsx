@@ -1,3 +1,7 @@
+import { useState } from "react";
+
+import { errorMessage } from "../api/client";
+import { runQuantumDiagnostics } from "../api/health";
 import { CapabilityBadge } from "../components/CapabilityBadge";
 import { WorksheetHeader } from "../components/WorksheetHeader";
 import { PipelineDiagram } from "../diagrams/PipelineDiagram";
@@ -36,7 +40,7 @@ export function OverviewWorksheet() {
       <div className="overview-status-grid" aria-live="polite">
         <HealthCard title="Backend API" health={state.backend_health} />
         <HealthCard title="Sensor network service" health={state.network.health} />
-        <HealthCard title="Qiskit exact statevector" health={state.quantum_health} />
+        <QuantumHealthCard health={state.quantum_health} />
         <article className="status-card">
           <p className="panel-kicker">SIMULATION PROCESS</p>
           <strong className={`large-status ${session?.state ?? "idle"}`}>
@@ -153,6 +157,49 @@ function HealthCard({ title, health }: { title: string; health: ServiceHealth })
       <h3>{title}</h3>
       <strong className={`large-status ${health.status}`}>{health.status.toUpperCase()}</strong>
       <small>{health.detail ?? "Awaiting health response."}</small>
+    </article>
+  );
+}
+
+function QuantumHealthCard({ health }: { health: ServiceHealth }) {
+  const [requestStatus, setRequestStatus] = useState<"idle" | "running" | "complete" | "failed">("idle");
+  const [result, setResult] = useState<string | null>(null);
+
+  const runDiagnostics = async () => {
+    if (requestStatus === "running") return;
+    setRequestStatus("running");
+    setResult("Running the explicit Qiskit/NumPy statevector comparison…");
+    try {
+      const diagnostics = await runQuantumDiagnostics();
+      setRequestStatus("complete");
+      setResult(
+        `State comparison ${diagnostics.state_comparison} · ${diagnostics.execution_duration_ms.toFixed(1)} ms`,
+      );
+    } catch (error: unknown) {
+      setRequestStatus("failed");
+      setResult(errorMessage(error, "Quantum diagnostics failed."));
+    }
+  };
+
+  return (
+    <article className="status-card">
+      <p className="panel-kicker">QUANTUM READINESS</p>
+      <h3>Quantum adapter</h3>
+      <strong className={`large-status ${health.status}`}>{health.status.toUpperCase()}</strong>
+      <small>{health.detail ?? "Awaiting lightweight readiness response."}</small>
+      <button
+        type="button"
+        className="button button-secondary"
+        disabled={requestStatus === "running" || health.status !== "ready"}
+        onClick={() => void runDiagnostics()}
+      >
+        {requestStatus === "running" ? "RUNNING DIAGNOSTICS…" : "RUN QUANTUM DIAGNOSTICS"}
+      </button>
+      {result && (
+        <small aria-live="polite" className={requestStatus === "failed" ? "inline-message" : undefined}>
+          {result}
+        </small>
+      )}
     </article>
   );
 }

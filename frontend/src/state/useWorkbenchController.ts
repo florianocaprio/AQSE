@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
 
-import { ApiError, errorMessage, requestJson } from "../api/client";
+import { ApiError, errorMessage } from "../api/client";
 import { extractVectorMagnetometerFeatures } from "../api/features";
+import { getBackendHealth, getQuantumHealth } from "../api/health";
 import {
   controlNetworkSession,
   createNetworkSession,
@@ -19,7 +20,6 @@ import {
 } from "../api/network";
 import { getCircuitDescription, runQuantumPreview } from "../api/quantum";
 import { getWorkbenchCapabilities } from "../api/workbench";
-import type { QuantumHealthResponse, HealthResponse } from "../types";
 import type {
   FrameBatch,
   NetworkSessionConfiguration,
@@ -67,7 +67,7 @@ export function useWorkbenchBootstrap() {
       const signal = controller.signal;
       const checkedAt = () => new Date().toISOString();
 
-      void requestJson<HealthResponse>("/api/health", { signal })
+      void getBackendHealth(signal)
         .then((response) => {
           dispatch({
             type: "BACKEND_HEALTH",
@@ -91,13 +91,13 @@ export function useWorkbenchBootstrap() {
           }
         });
 
-      void requestJson<QuantumHealthResponse>("/api/quantum/health", { signal })
+      void getQuantumHealth(signal)
         .then((response) => {
           dispatch({
             type: "QUANTUM_HEALTH",
             health: {
               status: response.status === "ok" ? "ready" : "unavailable",
-              detail: `${response.engine} · ${response.simulation}`,
+              detail: `${response.engine} · Qiskit ${response.qiskit_version} · ${response.simulation}`,
               checked_at: checkedAt(),
             },
           });

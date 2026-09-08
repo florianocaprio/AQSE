@@ -48,18 +48,7 @@ class TQK8Adapter(QuantumEngine):
 
     @property
     def metadata(self) -> QuantumEngineMetadata:
-        simulation = (
-            "qiskit_statevector"
-            if self._backend_type == "qiskit"
-            else "numpy_statevector"
-        )
-        return QuantumEngineMetadata(
-            engine_name="AQSE TQK8",
-            number_of_qubits=N_QUBITS,
-            number_of_features=N_QUBITS,
-            number_of_parameters=N_PARAMS,
-            backend_type=simulation,
-        )
+        return quantum_engine_metadata(self._backend_type)
 
     def state(
         self,
@@ -87,6 +76,21 @@ class TQK8Adapter(QuantumEngine):
             self._engine.gram(query_features, parameters, reference_features),
             dtype=np.float64,
         )
+
+
+def quantum_engine_metadata(backend_type: BackendType) -> QuantumEngineMetadata:
+    """Return adapter metadata without constructing an exact-state engine."""
+
+    simulation = (
+        "qiskit_statevector" if backend_type == "qiskit" else "numpy_statevector"
+    )
+    return QuantumEngineMetadata(
+        engine_name="AQSE TQK8",
+        number_of_qubits=N_QUBITS,
+        number_of_features=N_QUBITS,
+        number_of_parameters=N_PARAMS,
+        backend_type=simulation,
+    )
 
 
 def run_quantum_infrastructure_smoke_test() -> QuantumInfrastructureStatus:

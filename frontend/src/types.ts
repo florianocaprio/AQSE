@@ -6,12 +6,29 @@ export type HealthResponse = {
 export type QuantumHealthResponse = {
   status: string;
   engine: string;
+  adapter: string;
+  qiskit: string;
+  qiskit_version: string;
+  numpy_reference: string;
+  qubits: number;
+  features: number;
+  trainable_parameters: number;
+  simulation: string;
+  circuit_metadata: string;
+  entangling_edges: number;
+};
+
+export type QuantumDiagnosticsResponse = {
+  status: string;
+  engine: string;
   qiskit: string;
   numpy_reference: string;
   qubits: number;
   features: number;
   trainable_parameters: number;
   simulation: string;
+  state_comparison: string;
+  execution_duration_ms: number;
 };
 
 export type MagnetometerConfiguration = {

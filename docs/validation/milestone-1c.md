@@ -65,7 +65,8 @@ The following requests returned the expected status:
 | Request | HTTP result | Evidence |
 | --- | ---: | --- |
 | `GET /api/health` | 200 | `status=ok`, `service=AQSE Backend` |
-| `GET /api/quantum/health` | 200 | Qiskit and NumPy exact-state paths ready |
+| `GET /api/quantum/health` | 200 | lightweight adapter, Qiskit, backend, and circuit metadata readiness |
+| `POST /api/quantum/diagnostics` | 200 | explicit Qiskit/NumPy exact-state comparison; never polled |
 | `GET /api/sensors` | 200 | legacy magnetometer remains listed |
 | `GET /api/sensors/magnetometer/defaults` | 200 | legacy configuration returned |
 | `POST /api/sensors/magnetometer/simulate` | 200 | 400 samples and the original 8-feature result |

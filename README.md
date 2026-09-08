@@ -127,7 +127,8 @@ I bind mount e i processi di reload automatico rendono disponibili le modifiche 
 | --- | --- |
 | Frontend | `http://localhost:3000` |
 | Backend health | `http://localhost:8000/api/health` |
-| Quantum infrastructure health | `http://localhost:8000/api/quantum/health` |
+| Quantum adapter readiness | `http://localhost:8000/api/quantum/health` |
+| Quantum infrastructure diagnostics | `POST http://localhost:8000/api/quantum/diagnostics` |
 | Workbench capabilities | `http://localhost:8000/api/workbench/capabilities` |
 | Network health | `http://localhost:8000/api/network/health` |
 | Network presets | `http://localhost:8000/api/network/presets` |
@@ -176,12 +177,27 @@ SOAK_DURATION_SECONDS=60 SOAK_NODE_COUNT=4 SOAK_SEED=42 make soak
 make test
 curl --fail http://localhost:8000/api/health
 curl --fail http://localhost:8000/api/quantum/health
+curl --fail --request POST http://localhost:8000/api/quantum/diagnostics
 curl --fail http://localhost:8000/api/network/health
 curl --fail http://localhost:8000/api/network/presets
 curl --fail http://localhost:3000
 ```
 
-Il quantum health endpoint è soltanto uno smoke test deterministico di infrastruttura. Costruisce il VQC, ne controlla la struttura e confronta il risultato Qiskit con il riferimento NumPy; non addestra alcun modello e non restituisce lo statevector.
+`GET /api/health` è il solo probe Docker del backend e non importa né esegue
+calcoli quantistici. Docker lo controlla ogni 10 secondi con timeout di 3 secondi,
+cinque tentativi e 5 secondi iniziali di tolleranza.
+
+`GET /api/quantum/health` è una readiness leggera: verifica disponibilità
+dell'adapter, installazione di Qiskit e metadata statici del backend/circuito,
+senza costruire statevector, kernel o confronti numerici. Il frontend può
+interrogarla periodicamente.
+
+`POST /api/quantum/diagnostics` è invece lo smoke test deterministico esplicito.
+Solo su richiesta costruisce il VQC, esegue gli statevector Qiskit e NumPy e li
+confronta numericamente, restituendo anche il tempo di esecuzione. Un guard
+impedisce diagnostiche concorrenti e risponde HTTP 429 quando una è già attiva.
+Questo percorso non addestra modelli, non invoca QNG e non restituisce lo
+statevector.
 
 Il piano riproducibile è in `docs/validation/milestone-1c-validation-plan.md`; i comandi realmente eseguiti, i risultati misurati e i limiti osservati sono registrati in `docs/validation/milestone-1c.md`.
 

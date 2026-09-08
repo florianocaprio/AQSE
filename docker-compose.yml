@@ -9,6 +9,7 @@ services:
     volumes:
       - ./backend:/app
     healthcheck:
+      # Lightweight liveness/readiness only; quantum diagnostics are explicit POST requests.
       test:
         - CMD
         - python
