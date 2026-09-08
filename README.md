@@ -1,6 +1,6 @@
 # AQSE — Adaptive Quantum Sensor Engine
 
-AQSE è un dimostratore locale per una pipeline ibrida di elaborazione classica/quantistica applicata a sensori quantistici. Il Milestone 1A integra e valida l’implementazione TQK8 fornita da Floriano, senza aggiungere simulazione sensori, AFSE, interfaccia finale o accesso a QPU fisiche.
+AQSE è un dimostratore locale per una pipeline ibrida di elaborazione classica/quantistica applicata a sensori quantistici. Il Milestone 1A integra e valida l’implementazione TQK8 fornita da Floriano; il Milestone 1B aggiunge un magnetometro quantistico sintetico configurabile e l’estrazione di otto feature interpretabili.
 
 ## Responsabilità scientifica
 
@@ -10,14 +10,29 @@ Il contratto corrente usa 8 feature generiche `f0..f7`, 8 qubit logici, 16 param
 
 ## Architettura
 
-- `frontend`: pagina minima di stato React, TypeScript e Vite.
+- `frontend`: dashboard tecnica React, TypeScript e Vite per stato ambiente,
+  configurazione del simulatore e ispezione dei risultati.
 - `backend`: API REST Python e FastAPI.
 - `backend/app/quantum/adapter.py`: adapter applicativo per i motori statevector Qiskit e NumPy.
 - `backend/app/quantum/user_pipeline/`: implementazione scientifica TQK8 fornita dall’autore.
+- `backend/app/sensors/`: contratti generici e modello del magnetometro simulato.
+- `backend/app/preprocessing/`: analisi spettrale ed estrazione delle feature.
 - `backend/tests/quantum/`: test numerici originali di Floriano.
-- `docs/`: notebook, README scientifico e risultati di validazione ricevuti.
+- `docs/`: notebook, documentazione scientifica, sensori e risultati di validazione.
 
-QNG è feedback di training, non uno stadio di inferenza. Il Milestone 1A non introduce un embedding persistente o AFSE.
+QNG è feedback di training, non uno stadio di inferenza. Il Milestone 1B non introduce un embedding persistente o AFSE e non collega ancora le feature del sensore al motore quantistico.
+
+## Simulatore magnetometro
+
+Il simulatore genera una serie temporale in nanotesla composta da campo di fondo, sinusoide, drift lineare, rumore gaussiano e un transiente opzionale. I seed rendono la componente stocastica ripetibile. Non riproduce uno strumento commerciale e non dichiara accuratezza sperimentale.
+
+L’estrattore restituisce, senza normalizzazione, il vettore ordinato:
+
+```text
+[amplitude, phase, frequency, variance, drift, snr, spectral_peak, temperature]
+```
+
+Ampiezza, fase, frequenza, varianza, drift, SNR e picco spettrale sono stimati dal segnale; solo la temperatura proviene dai metadati di acquisizione. Formule, unità, convenzioni numeriche e limiti sono descritti in [`docs/sensors/magnetometer.md`](docs/sensors/magnetometer.md).
 
 ## Motori locali
 
@@ -51,6 +66,8 @@ Servizi disponibili:
 | Frontend | `http://localhost:3000` |
 | Backend health | `http://localhost:8000/api/health` |
 | Quantum infrastructure health | `http://localhost:8000/api/quantum/health` |
+| Sensor catalog | `http://localhost:8000/api/sensors` |
+| Magnetometer defaults | `http://localhost:8000/api/sensors/magnetometer/defaults` |
 | FastAPI docs | `http://localhost:8000/docs` |
 
 Il frontend inoltra `/api` al backend tramite il proxy Vite. Le porte possono essere cambiate nel file `.env` a partire da `.env.example`.
@@ -61,10 +78,25 @@ Il frontend inoltra `/api` al backend tramite il proxy Vite. Le porte possono es
 make test
 curl --fail http://localhost:8000/api/health
 curl --fail http://localhost:8000/api/quantum/health
+curl --fail http://localhost:8000/api/sensors
+curl --fail http://localhost:8000/api/sensors/magnetometer/defaults
 curl --fail http://localhost:3000
 ```
 
-`make test` esegue l’intera suite backend, inclusi gli otto test numerici originali con i cross-check Qiskit attivi, e la build TypeScript/Vite del frontend. Il quantum health endpoint esegue unicamente un piccolo smoke test deterministico di infrastruttura: costruisce il VQC, verifica i conteggi strutturali e confronta uno stato Qiskit con il riferimento NumPy. Non addestra alcun modello e non restituisce statevector.
+`make test` esegue l’intera suite backend, inclusi gli otto test numerici originali con i cross-check Qiskit attivi e i test deterministici del sensore, quindi la build TypeScript/Vite del frontend. Il quantum health endpoint esegue unicamente un piccolo smoke test deterministico di infrastruttura: costruisce il VQC, verifica i conteggi strutturali e confronta uno stato Qiskit con il riferimento NumPy. Non addestra alcun modello e non restituisce statevector.
+
+Il report riproducibile del Milestone 1B è in [`docs/validation/milestone-1b.md`](docs/validation/milestone-1b.md).
+
+Esempio di simulazione:
+
+```sh
+curl --fail \
+  --header 'Content-Type: application/json' \
+  --data '{"duration":2,"sampling_rate":200,"frequency":8,"random_seed":42}' \
+  http://localhost:8000/api/sensors/magnetometer/simulate
+```
+
+La pagina frontend permette di configurare il simulatore, visualizzare segnale e spettro e ispezionare le otto feature. Contiene inoltre una bozza locale modificabile dei 16 parametri `θ0…θ15`: quei valori rimangono nella memoria del browser e non vengono inviati o applicati al circuito in questo milestone.
 
 ## Struttura
 
@@ -75,7 +107,10 @@ AQSE/
 │   │   ├── api/
 │   │   ├── models/
 │   │   ├── pipeline/
+│   │   ├── preprocessing/
 │   │   ├── sensors/
+│   │   │   ├── magnetometer.py
+│   │   │   └── models.py
 │   │   └── quantum/
 │   │       ├── adapter.py
 │   │       ├── engine.py
@@ -89,6 +124,7 @@ AQSE/
 ├── docs/
 │   ├── notebooks/
 │   ├── quantum/
+│   ├── sensors/
 │   └── validation/tqk8/
 ├── docker-compose.yml
 ├── Makefile
