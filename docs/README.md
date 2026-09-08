@@ -1,4 +1,7 @@
 # Documentazione AQSE
 
-La documentazione tecnica aggiuntiva sarà introdotta insieme ai componenti futuri. La panoramica del bootstrap locale è nel `README.md` alla radice.
+- `notebooks/TQK8_walkthrough.ipynb`: notebook originale fornito da Floriano.
+- `quantum/README_TQK8.md`: documentazione scientifica originale TQK8.
+- `validation/tqk8/`: risultati di riferimento della validazione NumPy ricevuta.
 
+La procedura integrata e i relativi endpoint sono descritti nel `README.md` alla radice.

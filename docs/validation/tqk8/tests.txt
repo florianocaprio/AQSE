@@ -1,0 +1,13 @@
+test_budget_before_execution (test_tqk8.TestTQK8.test_budget_before_execution) ... ok
+test_each_parameter_can_change_kernel (test_tqk8.TestTQK8.test_each_parameter_can_change_kernel) ... ok
+test_kernel (test_tqk8.TestTQK8.test_kernel) ... ok
+test_measurement_formulas_against_state_derivatives (test_tqk8.TestTQK8.test_measurement_formulas_against_state_derivatives) ... ok
+test_qiskit_state_and_gate_counts (test_tqk8.TestTQK8.test_qiskit_state_and_gate_counts) ... skipped 'Qiskit non installato'
+test_qng_decreases_demo_loss (test_tqk8.TestTQK8.test_qng_decreases_demo_loss) ... ok
+test_sampler (test_tqk8.TestTQK8.test_sampler) ... skipped 'Qiskit non installato'
+test_total_loss_gradient_finite_difference (test_tqk8.TestTQK8.test_total_loss_gradient_finite_difference) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 1.692s
+
+OK (skipped=2)

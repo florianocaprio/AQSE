@@ -1,0 +1,9 @@
+{
+  "engine": "numpy",
+  "loss_initial": 0.6978853157901039,
+  "loss_final": 0.5540718175920116,
+  "test_balanced_accuracy_tqk": 0.8706293706293706,
+  "test_balanced_accuracy_rbf": 0.8706293706293706,
+  "n_train": 40,
+  "n_test": 24
+}

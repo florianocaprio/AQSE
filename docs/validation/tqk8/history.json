@@ -1,0 +1,122 @@
+[
+  {
+    "epoch": 0,
+    "loss_before": 0.6978853157901039,
+    "loss_after": 0.6787786070720946,
+    "gradient_norm": 0.14309250906854407,
+    "step_norm": 0.1444890236138661,
+    "metric_min_eigenvalue": 0.07666128777658394
+  },
+  {
+    "epoch": 1,
+    "loss_before": 0.6787786070720946,
+    "loss_after": 0.6591597657599144,
+    "gradient_norm": 0.14764913768727853,
+    "step_norm": 0.14608758309957082,
+    "metric_min_eigenvalue": 0.07665814208275289
+  },
+  {
+    "epoch": 2,
+    "loss_before": 0.6591597657599144,
+    "loss_after": 0.6408559950027226,
+    "gradient_norm": 0.14493897988840515,
+    "step_norm": 0.14029418639507485,
+    "metric_min_eigenvalue": 0.07665378323750999
+  },
+  {
+    "epoch": 3,
+    "loss_before": 0.6408559950027226,
+    "loss_after": 0.6250288323623683,
+    "gradient_norm": 0.13627546362866497,
+    "step_norm": 0.12928872702282965,
+    "metric_min_eigenvalue": 0.07664903915568802
+  },
+  {
+    "epoch": 4,
+    "loss_before": 0.6250288323623683,
+    "loss_after": 0.6119113035002675,
+    "gradient_norm": 0.12466416799316439,
+    "step_norm": 0.11669454868066698,
+    "metric_min_eigenvalue": 0.0766448215162175
+  },
+  {
+    "epoch": 5,
+    "loss_before": 0.6119113035002675,
+    "loss_after": 0.6011655564828429,
+    "gradient_norm": 0.11275952307746796,
+    "step_norm": 0.10520253090644181,
+    "metric_min_eigenvalue": 0.07664170746536686
+  },
+  {
+    "epoch": 6,
+    "loss_before": 0.6011655564828429,
+    "loss_after": 0.5922996104072265,
+    "gradient_norm": 0.10195140756307502,
+    "step_norm": 0.09581440222560815,
+    "metric_min_eigenvalue": 0.07663983647750483
+  },
+  {
+    "epoch": 7,
+    "loss_before": 0.5922996104072265,
+    "loss_after": 0.584875967127202,
+    "gradient_norm": 0.09263251334807834,
+    "step_norm": 0.08843108507868899,
+    "metric_min_eigenvalue": 0.07663905781128598
+  },
+  {
+    "epoch": 8,
+    "loss_before": 0.584875967127202,
+    "loss_after": 0.5785615776130162,
+    "gradient_norm": 0.08471869015466221,
+    "step_norm": 0.08257716554665875,
+    "metric_min_eigenvalue": 0.07663910624927843
+  },
+  {
+    "epoch": 9,
+    "loss_before": 0.5785615776130162,
+    "loss_after": 0.5731149971893267,
+    "gradient_norm": 0.07798303632241234,
+    "step_norm": 0.07779008646206223,
+    "metric_min_eigenvalue": 0.07663971060100691
+  },
+  {
+    "epoch": 10,
+    "loss_before": 0.5731149971893267,
+    "loss_after": 0.5683610615354425,
+    "gradient_norm": 0.07219996137739865,
+    "step_norm": 0.07373879102237177,
+    "metric_min_eigenvalue": 0.07664064116150976
+  },
+  {
+    "epoch": 11,
+    "loss_before": 0.5683610615354425,
+    "loss_after": 0.5641695861277842,
+    "gradient_norm": 0.06718764460841155,
+    "step_norm": 0.07021920688035137,
+    "metric_min_eigenvalue": 0.07664172277443954
+  },
+  {
+    "epoch": 12,
+    "loss_before": 0.5641695861277842,
+    "loss_after": 0.5604407600377621,
+    "gradient_norm": 0.06280976165512822,
+    "step_norm": 0.06711511231462995,
+    "metric_min_eigenvalue": 0.07664283208365524
+  },
+  {
+    "epoch": 13,
+    "loss_before": 0.5604407600377621,
+    "loss_after": 0.5570959133073213,
+    "gradient_norm": 0.058965271267563214,
+    "step_norm": 0.06436046299986872,
+    "metric_min_eigenvalue": 0.07664388872821859
+  },
+  {
+    "epoch": 14,
+    "loss_before": 0.5570959133073213,
+    "loss_after": 0.5540718175920116,
+    "gradient_norm": 0.05557740037173682,
+    "step_norm": 0.06191308680390966,
+    "metric_min_eigenvalue": 0.07664484518647069
+  }
+]

@@ -1,0 +1,13 @@
+{
+  "validation_backend": "independent_numpy_statevector",
+  "qiskit_executed": false,
+  "physical_qpu_executed": false,
+  "reason": "Qiskit not installed; network restriction prevented installation.",
+  "python": "3.13.5",
+  "numpy": "2.3.5",
+  "tests_passed": 6,
+  "qiskit_tests_skipped": 2,
+  "max_abs_loss_gradient_error_vs_finite_difference": 4.816317622502453e-10,
+  "full_quantum_metric_min_eigenvalue": 0.05405151764085405,
+  "references_checked": "Official Qiskit documentation; Stokes et al.; Hubregtsen et al.; Schuld et al."
+}

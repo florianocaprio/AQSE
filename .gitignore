@@ -7,4 +7,6 @@ __pycache__/
 node_modules/
 dist/
 coverage/
-
+incoming/
+output_tqk8/
+.ipynb_checkpoints/
