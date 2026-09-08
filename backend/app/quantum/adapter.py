@@ -75,6 +75,19 @@ class TQK8Adapter(QuantumEngine):
     ) -> NDArray[np.float64]:
         return np.asarray(self._engine.gram(features, parameters), dtype=np.float64)
 
+    def cross_gram(
+        self,
+        query_features: NDArray[np.float64],
+        reference_features: NDArray[np.float64],
+        parameters: Sequence[float],
+    ) -> NDArray[np.float64]:
+        """Return query-to-reference fidelities using the existing TQK8 engine."""
+
+        return np.asarray(
+            self._engine.gram(query_features, parameters, reference_features),
+            dtype=np.float64,
+        )
+
 
 def run_quantum_infrastructure_smoke_test() -> QuantumInfrastructureStatus:
     """Validate local exact-state infrastructure; this is not AQSE training logic."""

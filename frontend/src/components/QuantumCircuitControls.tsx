@@ -27,23 +27,41 @@ const PARAMETER_GROUPS: ParameterGroup[] = [
   },
 ];
 
-export function QuantumCircuitControls() {
-  const [parameters, setParameters] = useState<number[]>(() =>
+type QuantumCircuitControlsProps = {
+  values?: readonly number[];
+  onChange?: (index: number, value: number) => void;
+  onReset?: () => void;
+  connectedToPreview?: boolean;
+};
+
+export function QuantumCircuitControls({
+  values,
+  onChange,
+  onReset,
+  connectedToPreview = false,
+}: QuantumCircuitControlsProps = {}) {
+  const [localParameters, setLocalParameters] = useState<number[]>(() =>
     Array.from({ length: PARAMETER_COUNT }, () => 0),
   );
+  const parameters = values ?? localParameters;
 
   const updateParameter = (index: number, value: number) => {
     if (!Number.isFinite(value)) return;
     const boundedValue = clamp(value, MIN_ANGLE, MAX_ANGLE);
-    setParameters((current) =>
-      current.map((parameter, currentIndex) =>
-        currentIndex === index ? boundedValue : parameter,
-      ),
-    );
+    if (onChange) {
+      onChange(index, boundedValue);
+    } else {
+      setLocalParameters((current) =>
+        current.map((parameter, currentIndex) =>
+          currentIndex === index ? boundedValue : parameter,
+        ),
+      );
+    }
   };
 
   const resetParameters = () => {
-    setParameters(Array.from({ length: PARAMETER_COUNT }, () => 0));
+    if (onReset) onReset();
+    else setLocalParameters(Array.from({ length: PARAMETER_COUNT }, () => 0));
   };
 
   return (
@@ -53,23 +71,25 @@ export function QuantumCircuitControls() {
           <p className="section-index">02 / QUANTUM CONFIGURATION</p>
           <h2 id="quantum-controls-heading">Quantum Circuit Parameters</h2>
           <p>
-            Prepare a local 16-angle parameter draft for the validated TQK8
-            circuit. This panel does not execute, train, or change the circuit.
+            Prepare a 16-angle parameter draft for the author-provided TQK8
+            circuit. Editing values never changes the circuit topology.
           </p>
         </div>
         <div className="local-state-badge">
           <span>Parameter state</span>
-          <strong>LOCAL DRAFT</strong>
+          <strong>{connectedToPreview ? "PREVIEW DRAFT" : "LOCAL DRAFT"}</strong>
         </div>
       </div>
 
       <div className="quantum-control-panel">
         <div className="quantum-notice" role="note">
           <div>
-            <span className="notice-marker" aria-hidden="true">∅</span>
+            <span className="notice-marker" aria-hidden="true">{connectedToPreview ? "θ" : "∅"}</span>
             <p>
-              <strong>Not connected to execution</strong>
-              Values are held in browser memory only and reset on page reload.
+              <strong>{connectedToPreview ? "Connected only to explicit preview" : "Not connected to execution"}</strong>
+              {connectedToPreview
+                ? "A preview uses a frozen theta snapshot. Training and QNG are not invoked."
+                : "Values are held in browser memory only and reset on page reload."}
             </p>
           </div>
           <button type="button" className="text-button" onClick={resetParameters}>

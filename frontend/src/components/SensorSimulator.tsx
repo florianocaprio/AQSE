@@ -11,6 +11,7 @@ import type {
   MagnetometerConfiguration,
   MagnetometerSimulationResponse,
 } from "../types";
+import { useWorkbench } from "../state/workbench";
 import { SignalChart } from "./SignalChart";
 import { SpectrumChart } from "./SpectrumChart";
 
@@ -146,6 +147,7 @@ const ANOMALY_CONTROLS: NumericControlDefinition[] = [
 ];
 
 export function SensorSimulator() {
+  const { dispatch } = useWorkbench();
   const [configuration, setConfiguration] =
     useState<MagnetometerConfiguration | null>(null);
   const [defaults, setDefaults] =
@@ -235,6 +237,8 @@ export function SensorSimulator() {
 
     setSimulating(true);
     setError(null);
+    const requestedConfiguration = { ...configuration };
+    const startedAt = performance.now();
 
     try {
       const response = await fetch("/api/sensors/magnetometer/simulate", {
@@ -250,6 +254,28 @@ export function SensorSimulator() {
       validateSimulationResponse(payload);
       setSimulation(payload);
       setResultIsStale(false);
+      dispatch({
+        type: "EXPERIMENT_ADD",
+        experiment: {
+          id: `experiment-${crypto.randomUUID()}`,
+          created_at: new Date().toISOString(),
+          kind: "scalar_simulation",
+          status: "completed",
+          title: `Scalar simulation · ${payload.acquisition.sensor_id}`,
+          sensor_type: payload.acquisition.sensor_type,
+          scenario: requestedConfiguration.anomaly_enabled
+            ? "configured transient anomaly"
+            : "baseline signal",
+          seed: requestedConfiguration.random_seed,
+          sample_count: payload.acquisition.sample_count,
+          request_snapshot: {
+            domain: "scalar_simulation",
+            configuration: requestedConfiguration,
+          },
+          warnings: [],
+          timings_ms: { request_total: performance.now() - startedAt },
+        },
+      });
     } catch (requestError) {
       setError(toErrorMessage(requestError, "Simulation request failed."));
     } finally {
