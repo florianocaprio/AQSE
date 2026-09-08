@@ -40,7 +40,9 @@ New physical and network computations use SI internally.
 | Bias random-walk intensity | square tesla per second, T²/s | nT²/s |
 | Noise amplitude density, when used | tesla per square-root hertz, T/√Hz | fT/√Hz or pT/√Hz |
 
-Conversions are centralized at API and UI boundaries. In particular:
+Unit boundaries are explicit: the network API and backend remain in SI, while
+the GUI converts magnetic-field values to the displayed nT, µT, or pT units.
+In particular:
 
     1 µT = 10⁻⁶ T
     1 nT = 10⁻⁹ T
@@ -230,25 +232,26 @@ For a tri-axial sensor, use column vectors and the approved ordered model:
 
     u_i(t) = R_world_to_sensor,i(t) · B_environment_world(r_i(t),t)
 
-    v_i(t) = C_axis,i · A_soft,i · G_gain,i · u_i(t)
+    v_i(t) = C_axis,i · G_gain,i · A_soft,i · u_i(t)
+
+    p_i(t) = v_i(t)
              + b_hard,i
              + b_temperature,i(t)
              + b_deterministic_drift,i(t)
              + b_random_walk,i(t)
              + b_correlated,i(t)
              + b_instrument_event,i(t)
+             + eta_white,i(t)
 
-    h_i(t) = H_bandwidth,i {v_i(t)}
-
-    z_i(t) = h_i(t) + eta_white,i(t)
+    h_i(t) = H_bandwidth,i {p_i(t)}
 
     measured_i(t) = availability_i(
-        saturate_i(project_mode_i(z_i(t))))
+        saturate_i(project_mode_i(h_i(t))))
 
 The right-most matrix acts first. Definitions are:
 
-- G_gain is diagonal and contains positive per-axis gain factors;
 - A_soft is the soft-iron deformation;
+- G_gain is diagonal and contains positive per-axis gain factors;
 - C_axis models controlled cross-axis coupling or non-orthogonality;
 - b_hard is a body-fixed, output-equivalent additive offset in sensor axes;
 - b_temperature = k_T (T_device − T_reference);
@@ -299,10 +302,11 @@ positive and below Nyquist. Near Nyquist the discrete response does not have an
 exact digital −3 dB point at the entered frequency; profiles requiring that
 property need a separately versioned, prewarped digital filter.
 
-White readout noise is added after this response in the approved model. This
-keeps the configured per-sample noise white and avoids relabelling filtered,
-colored noise as white. Measurement-mode projection and saturation follow the
-noise stage. Changing this order requires a new sensor-profile version.
+White readout noise is added to the deterministic sensor response and biases
+before this bandwidth stage. Consequently, enabling the hardware response
+colors and reduces the statistics of the configured per-sample white-noise
+input. Measurement-mode projection and saturation follow the filter, with
+saturation always applied last to the pre-clipping projected value.
 
 ## Saturation and availability
 
@@ -340,9 +344,10 @@ For the approved finite-vector contract,
 
     eta_white,i[k] ~ Normal(0, diag(sigma_x², sigma_y², sigma_z²)),
 
-where each sigma is an RMS standard deviation in nT per sample at the UI/API
-boundary and in T per sample internally. Axes are independent in this version.
-The configuration field is named white_noise_std_T_per_sample internally. This
+where each sigma is an RMS standard deviation in nT per sample at the GUI
+boundary and in T per sample in both the network API and backend. Axes are
+independent in this version. The configuration field is named
+white_noise_std_T_per_sample in the API and backend. This
 parameter is not a spectral amplitude density. A future input expressed in
 T/√Hz requires a separately named field plus an explicit equivalent-noise-bandwidth
 and one-sided or two-sided conversion contract.

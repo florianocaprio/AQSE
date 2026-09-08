@@ -485,8 +485,8 @@ class NetworkSimulator:
         errors = node.errors
         response = (
             np.asarray(errors.cross_axis_matrix, dtype=np.float64)
-            @ np.asarray(errors.soft_iron_matrix, dtype=np.float64)
             @ np.asarray(errors.gain_matrix, dtype=np.float64)
+            @ np.asarray(errors.soft_iron_matrix, dtype=np.float64)
             @ ideal_sensor_T
         )
         event_offset = np.zeros(3, dtype=np.float64)
@@ -508,7 +508,7 @@ class NetworkSimulator:
         thermal_bias = as_vector(errors.thermal_bias_T_per_K) * (
             runtime.device_temperature_K - errors.reference_temperature_K
         )
-        unfiltered_signal = (
+        deterministic_sensor_response = (
             response
             + as_vector(errors.bias_T)
             + as_vector(errors.deterministic_drift_T_per_s) * sim_time_s
@@ -518,17 +518,19 @@ class NetworkSimulator:
             + event_offset
             + event_drift
         )
+        white_sigma = as_vector(errors.white_noise_std_T_per_sample) * noise_multiplier
+        white_noise = white_sigma * runtime.white_rng.normal(size=3)
+        pre_filter_measurement = deterministic_sensor_response + white_noise
+
         if errors.bandwidth_Hz is None or runtime.filtered_signal_T is None:
-            runtime.filtered_signal_T = unfiltered_signal.copy()
+            runtime.filtered_signal_T = pre_filter_measurement.copy()
         elif dt_s > 0.0:
             coefficient = 1.0 - exp(-2.0 * pi * errors.bandwidth_Hz * dt_s)
             runtime.filtered_signal_T += coefficient * (
-                unfiltered_signal - runtime.filtered_signal_T
+                pre_filter_measurement - runtime.filtered_signal_T
             )
 
-        white_sigma = as_vector(errors.white_noise_std_T_per_sample) * noise_multiplier
-        white_noise = white_sigma * runtime.white_rng.normal(size=3)
-        return runtime.filtered_signal_T + white_noise
+        return runtime.filtered_signal_T
 
     @staticmethod
     def _project_and_clip(

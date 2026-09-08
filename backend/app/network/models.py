@@ -322,8 +322,8 @@ class NodeErrorConfiguration(StrictModel):
             raise ValueError("gain_matrix diagonal entries must be positive")
         combined = (
             np.asarray(self.cross_axis_matrix, dtype=np.float64)
-            @ soft_iron
             @ np.asarray(self.gain_matrix, dtype=np.float64)
+            @ soft_iron
         )
         if float(np.linalg.cond(combined)) > 100.0:
             raise ValueError("combined linear response condition number cannot exceed 100")

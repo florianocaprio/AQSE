@@ -190,8 +190,8 @@ def _predict_measurements(
         )
         response = (
             np.asarray(node.errors.cross_axis_matrix, dtype=np.float64)
-            @ np.asarray(node.errors.soft_iron_matrix, dtype=np.float64)
             @ np.asarray(node.errors.gain_matrix, dtype=np.float64)
+            @ np.asarray(node.errors.soft_iron_matrix, dtype=np.float64)
             @ rotation
             @ world_field
         )

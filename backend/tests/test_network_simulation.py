@@ -61,7 +61,7 @@ def _configuration(
     )
 
 
-def test_vector_response_uses_declared_matrix_order_and_hard_offset_afterwards() -> None:
+def test_vector_response_uses_non_commuting_c_axis_gain_soft_iron_order() -> None:
     gain = ((2.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 0.5))
     soft = ((1.0, 0.2, 0.0), (0.2, 1.0, 0.0), (0.0, 0.0, 1.0))
     cross = ((1.0, 0.0, 0.1), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
@@ -79,13 +79,34 @@ def test_vector_response_uses_declared_matrix_order_and_hard_offset_afterwards()
     environment = EnvironmentConfiguration(uniform_field_T=(10.0e-6, 20.0e-6, 30.0e-6))
 
     reading = _generate(_configuration(node, environment=environment), 1)[0].observation.readings[0]
-    expected = (
-        np.asarray(cross)
-        @ np.asarray(soft)
-        @ np.asarray(gain)
-        @ np.asarray(environment.uniform_field_T)
-        + np.asarray(bias)
+    gain_array = np.asarray(gain)
+    soft_array = np.asarray(soft)
+    cross_array = np.asarray(cross)
+    field_array = np.asarray(environment.uniform_field_T)
+    expected_linear_response = cross_array @ gain_array @ soft_array @ field_array
+    previous_incorrect_response = cross_array @ soft_array @ gain_array @ field_array
+    expected = expected_linear_response + np.asarray(bias)
+
+    assert not np.allclose(gain_array @ soft_array, soft_array @ gain_array)
+    assert not np.allclose(
+        expected_linear_response,
+        previous_incorrect_response,
+        rtol=0.0,
+        atol=1.0e-18,
     )
+    np.testing.assert_allclose(reading.components_T, expected, rtol=0.0, atol=1.0e-18)
+
+
+def test_vector_response_keeps_hard_offset_after_linear_response() -> None:
+    bias = (1.0e-6, -2.0e-6, 3.0e-6)
+    node = SensorNodeConfiguration(
+        sensor_id="S1",
+        position_m=(0.0, 0.0, 0.0),
+        errors=NodeErrorConfiguration(bias_T=bias),
+    )
+    environment = EnvironmentConfiguration(uniform_field_T=(10.0e-6, 20.0e-6, 30.0e-6))
+    reading = _generate(_configuration(node, environment=environment), 1)[0].observation.readings[0]
+    expected = np.asarray(environment.uniform_field_T) + np.asarray(bias)
 
     np.testing.assert_allclose(reading.components_T, expected, rtol=0.0, atol=1.0e-18)
 
@@ -443,7 +464,7 @@ def test_gaussian_crossing_temporal_width_is_spatial_scale_divided_by_speed() ->
     assert after == pytest.approx(before)
 
 
-def test_bandwidth_filter_applies_before_white_noise_and_persists_between_calls() -> None:
+def test_bandwidth_filter_reduces_dynamic_deterministic_response_and_persists() -> None:
     motion = NodeMotionConfiguration(
         kind=MotionKind.HIGH_DYNAMIC,
         angular_rate_rad_per_s=(0.0, 0.0, 2.0 * np.pi * 5.0),
@@ -491,12 +512,12 @@ def test_bandwidth_filter_applies_before_white_noise_and_persists_between_calls(
     ]
 
 
-def test_bandwidth_filters_hard_offset_step_but_not_per_sample_white_noise() -> None:
+def test_bandwidth_filters_seeded_white_noise_and_replay_is_deterministic() -> None:
     filtered_node = SensorNodeConfiguration(
         sensor_id="S1",
         position_m=(0.0, 0.0, 0.0),
         errors=NodeErrorConfiguration(
-            bandwidth_Hz=1.0,
+            bandwidth_Hz=2.0,
             white_noise_std_T_per_sample=(2.0e-9,) * 3,
         ),
     )
@@ -509,21 +530,144 @@ def test_bandwidth_filters_hard_offset_step_but_not_per_sample_white_noise() -> 
         }
     )
     zero_environment = EnvironmentConfiguration(uniform_field_T=(0.0, 0.0, 0.0))
+    sample_count = 4_096
+    sampling_rate_hz = 100.0
+    filtered_configuration = _configuration(
+        filtered_node,
+        sampling_rate_Hz=sampling_rate_hz,
+        environment=zero_environment,
+        seed=31,
+    )
+    unfiltered_configuration = _configuration(
+        unfiltered_node,
+        sampling_rate_Hz=sampling_rate_hz,
+        environment=zero_environment,
+        seed=31,
+    )
     filtered_noise = _generate(
-        _configuration(filtered_node, sampling_rate_Hz=10.0, environment=zero_environment),
-        3,
+        filtered_configuration,
+        sample_count,
     )
     unfiltered_noise = _generate(
-        _configuration(unfiltered_node, sampling_rate_Hz=10.0, environment=zero_environment),
-        3,
+        unfiltered_configuration,
+        sample_count,
     )
+
+    raw_x = np.asarray(
+        [frame.observation.readings[0].components_T[0] for frame in unfiltered_noise]
+    )
+    filtered_x = np.asarray(
+        [frame.observation.readings[0].components_T[0] for frame in filtered_noise]
+    )
+    alpha = 1.0 - np.exp(-2.0 * np.pi * 2.0 / sampling_rate_hz)
+    expected_filtered = np.empty_like(raw_x)
+    expected_filtered[0] = raw_x[0]
+    for index in range(1, sample_count):
+        expected_filtered[index] = expected_filtered[index - 1] + alpha * (
+            raw_x[index] - expected_filtered[index - 1]
+        )
+
+    np.testing.assert_allclose(filtered_x, expected_filtered, rtol=0.0, atol=1.0e-24)
+    raw_std = float(np.std(raw_x[512:]))
+    filtered_std = float(np.std(filtered_x[512:]))
+    assert raw_std == pytest.approx(2.0e-9, rel=0.08)
+    assert filtered_std < 0.3 * raw_std
+
+    replayed = _generate(filtered_configuration, sample_count)
     assert [frame.observation.readings[0].components_T for frame in filtered_noise] == [
-        frame.observation.readings[0].components_T for frame in unfiltered_noise
+        frame.observation.readings[0].components_T for frame in replayed
     ]
 
-    no_noise_node = filtered_node.model_copy(
-        update={"errors": NodeErrorConfiguration(bandwidth_Hz=1.0)}
+
+def test_white_noise_then_bandwidth_then_saturation_uses_pre_clip_mask() -> None:
+    sampling_rate_hz = 100.0
+    bandwidth_hz = 1.0
+    saturation_limit_t = 1.0e-6
+    sample_count = 512
+    zero_environment = EnvironmentConfiguration(uniform_field_T=(0.0, 0.0, 0.0))
+    raw_node = SensorNodeConfiguration(
+        sensor_id="S1",
+        position_m=(0.0, 0.0, 0.0),
+        errors=NodeErrorConfiguration(
+            white_noise_std_T_per_sample=(4.0e-6,) * 3,
+            saturation_limit_T=10.0,
+        ),
     )
+    filtered_node = raw_node.model_copy(
+        update={
+            "errors": NodeErrorConfiguration(
+                white_noise_std_T_per_sample=(4.0e-6,) * 3,
+                bandwidth_Hz=bandwidth_hz,
+                saturation_limit_T=saturation_limit_t,
+            )
+        }
+    )
+    raw_frames = _generate(
+        _configuration(
+            raw_node,
+            sampling_rate_Hz=sampling_rate_hz,
+            environment=zero_environment,
+            seed=59,
+        ),
+        sample_count,
+    )
+    measured_frames = _generate(
+        _configuration(
+            filtered_node,
+            sampling_rate_Hz=sampling_rate_hz,
+            environment=zero_environment,
+            seed=59,
+        ),
+        sample_count,
+    )
+    raw_x = np.asarray(
+        [frame.observation.readings[0].components_T[0] for frame in raw_frames]
+    )
+    alpha = 1.0 - np.exp(-2.0 * np.pi * bandwidth_hz / sampling_rate_hz)
+    expected_pre_clip = np.empty_like(raw_x)
+    expected_pre_clip[0] = raw_x[0]
+    for index in range(1, sample_count):
+        expected_pre_clip[index] = expected_pre_clip[index - 1] + alpha * (
+            raw_x[index] - expected_pre_clip[index - 1]
+        )
+    expected_output = np.clip(
+        expected_pre_clip,
+        -saturation_limit_t,
+        saturation_limit_t,
+    )
+    measured_x = np.asarray(
+        [frame.observation.readings[0].components_T[0] for frame in measured_frames]
+    )
+    measured_mask_x = [
+        frame.observation.readings[0].saturation_mask[0] for frame in measured_frames
+    ]
+
+    np.testing.assert_allclose(measured_x, expected_output, rtol=0.0, atol=1.0e-24)
+    assert measured_mask_x == [
+        bool(abs(value) > saturation_limit_t) for value in expected_pre_clip
+    ]
+
+    clipped_before_filter = np.clip(raw_x, -saturation_limit_t, saturation_limit_t)
+    wrong_saturation_first = np.empty_like(raw_x)
+    wrong_saturation_first[0] = clipped_before_filter[0]
+    for index in range(1, sample_count):
+        wrong_saturation_first[index] = wrong_saturation_first[index - 1] + alpha * (
+            clipped_before_filter[index] - wrong_saturation_first[index - 1]
+        )
+    wrong_filter_then_noise = np.clip(raw_x, -saturation_limit_t, saturation_limit_t)
+
+    assert float(np.max(np.abs(measured_x - wrong_saturation_first))) > 1.0e-7
+    assert float(np.max(np.abs(measured_x - wrong_filter_then_noise))) > 1.0e-7
+
+
+def test_bandwidth_filters_hard_offset_step() -> None:
+    no_noise_node = SensorNodeConfiguration(
+        sensor_id="S1",
+        position_m=(0.0, 0.0, 0.0),
+        errors=NodeErrorConfiguration(bandwidth_Hz=1.0),
+    )
+    zero_environment = EnvironmentConfiguration(uniform_field_T=(0.0, 0.0, 0.0))
+
     step = NetworkEventConfiguration(
         event_id="bias-step",
         kind=EventKind.NODE_BIAS,

@@ -125,7 +125,8 @@ test. Tolerances are recorded with the implementation and data type.
 | Mode | Tri-axial, mono-axial, and scalar outputs expose only actually measured values |
 
 Include a non-commuting matrix case so a regression in the approved order
-C_axis · A_soft · G · R cannot pass accidentally.
+C_axis · G · A_soft · R cannot pass accidentally. The test must also calculate
+the former C_axis · A_soft · G · R order and prove that it differs.
 
 ## Bandwidth and sampling tests
 
@@ -160,7 +161,10 @@ produce comprehensible validation errors or quality warnings.
 
 - White-noise sample mean and variance match configured per-axis RMS within a
   predeclared statistical acceptance interval across fixed seeds.
-- White noise is added after the bandwidth filter in the approved model.
+- White noise is added before the bandwidth filter, using matched deterministic
+  streams to prove that enabling bandwidth changes the output statistics.
+- Saturation is applied after bandwidth filtering, and its mask is derived from
+  the corresponding pre-clipping value.
 - Random-walk increment variance scales with q·dt.
 - Ensemble random-walk variance scales with elapsed simulated time.
 - Deterministic drift scales with dt rather than sqrt(dt).
