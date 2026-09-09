@@ -181,6 +181,7 @@ def _partition_payload(build: DatasetBuild, partition: DatasetPartition) -> dict
     )
     if not episodes:
         raise ValueError(f"partition {partition.value} contains no episodes")
+    assignments_by_episode = {item.episode_id: item for item in build.assignments}
     arrays: dict[str, NDArray[Any]] = {
         "time_s": np.stack([episode.time_s for episode in episodes]),
         "measured_field_T": np.stack([episode.measured_field_T for episode in episodes]),
@@ -219,9 +220,8 @@ def _partition_payload(build: DatasetBuild, partition: DatasetPartition) -> dict
         "partition": partition.value,
         "plans": [episode.plan.model_dump(mode="json") for episode in episodes],
         "assignments": [
-            assignment.model_dump(mode="json")
-            for assignment in build.assignments
-            if assignment.partition is partition
+            assignments_by_episode[episode.plan.episode_id].model_dump(mode="json")
+            for episode in episodes
         ],
         "observation_bindings": [
             {

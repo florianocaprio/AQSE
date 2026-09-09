@@ -129,6 +129,18 @@ def test_writer_accepts_independent_equal_time_axes_with_different_data(
     assert manifest.schema_version == "aqse.dataset-manifest.v2"
 
 
+def test_writer_aligns_reordered_assignments_by_episode_identity(
+    tmp_path: Path,
+    small_development_build,
+) -> None:
+    reordered = replace(
+        small_development_build,
+        assignments=tuple(reversed(small_development_build.assignments)),
+    )
+    path, _, _ = write_dataset(reordered, root=tmp_path)
+    assert path.is_dir()
+
+
 def test_writer_rejects_missing_and_incoherent_identity_references(
     tmp_path: Path,
     small_pilot_build,
