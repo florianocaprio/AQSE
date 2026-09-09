@@ -72,6 +72,7 @@ type FeatureState = {
   source_session_id: string | null;
   source_data_revision: number | null;
   request_status: RequestStatus;
+  active_request_id: string | null;
   error: string | null;
 };
 
@@ -84,6 +85,7 @@ type QuantumState = {
   preview: QuantumPreviewResponse | null;
   computed: ComputedArtifact<QuantumPreviewResponse> | null;
   request_status: RequestStatus;
+  active_request_id: string | null;
   error: string | null;
 };
 
@@ -124,24 +126,28 @@ export type WorkbenchAction =
   | { type: "NETWORK_CLEAR_DATA" }
   | { type: "FEATURE_DRAFT"; configuration: FeatureWindowConfiguration }
   | { type: "FEATURE_CHANNEL"; channel: SignalChannel }
-  | { type: "FEATURE_REQUEST"; status: RequestStatus; error?: string }
+  | { type: "FEATURE_REQUEST"; status: RequestStatus; request_id?: string; error?: string }
   | {
       type: "FEATURE_RESULT";
       result: FeatureExtractionResponse;
       source_session_id: string;
       source_data_revision: number;
       snapshot: ExecutedSnapshot<FeatureWindowConfiguration>;
+      request_id: string;
+      input_artifact_ids: string[];
     }
   | { type: "THETA_VALUE"; index: number; value: number }
   | { type: "THETA_RESET" }
   | { type: "QUANTUM_BACKEND"; backend: QuantumBackend }
   | { type: "QUANTUM_PREVIEW_SIZE"; size: number }
   | { type: "QUANTUM_CIRCUIT"; circuit: CircuitDescription }
-  | { type: "QUANTUM_REQUEST"; status: RequestStatus; error?: string }
+  | { type: "QUANTUM_REQUEST"; status: RequestStatus; request_id?: string; error?: string }
   | {
       type: "QUANTUM_RESULT";
       preview: QuantumPreviewResponse;
       theta_snapshot: ExecutedSnapshot<ThetaVector>;
+      request_id: string;
+      input_artifact_ids: string[];
     }
   | { type: "WARNING_ADD"; warning: WarningRecord }
   | { type: "WARNING_DISMISS"; id: string }
@@ -192,6 +198,7 @@ export function createInitialWorkbenchState(): WorkbenchState {
       source_session_id: null,
       source_data_revision: null,
       request_status: "idle",
+      active_request_id: null,
       error: null,
     },
     quantum: {
@@ -203,6 +210,7 @@ export function createInitialWorkbenchState(): WorkbenchState {
       preview: null,
       computed: null,
       request_status: "idle",
+      active_request_id: null,
       error: null,
     },
     warnings: [],
@@ -357,6 +365,8 @@ export function workbenchReducer(
             action.frames,
             networkFrameLimit(state),
           ),
+          data_revision:
+            state.network.data_revision + (action.frames.length > 0 ? 1 : 0),
           gap_detected: state.network.gap_detected || Boolean(action.gap_detected),
         },
       };
@@ -410,15 +420,25 @@ export function workbenchReducer(
         },
       };
     case "FEATURE_REQUEST":
+      if (
+        action.status !== "loading" &&
+        action.request_id !== undefined &&
+        action.request_id !== state.features.active_request_id
+      ) return state;
       return {
         ...state,
         features: {
           ...state.features,
           request_status: action.status,
+          active_request_id:
+            action.status === "loading"
+              ? action.request_id ?? null
+              : null,
           error: action.error ?? null,
         },
       };
     case "FEATURE_RESULT":
+      if (action.request_id !== state.features.active_request_id) return state;
       return {
         ...state,
         features: {
@@ -430,9 +450,7 @@ export function workbenchReducer(
               experiment_id: action.snapshot.id,
               artifact_id: `feature-artifact-${action.snapshot.id}`,
               created_at: action.snapshot.executed_at,
-              input_artifact_ids: state.network.executed
-                ? [state.network.executed.id]
-                : [],
+              input_artifact_ids: action.input_artifact_ids,
               configuration_snapshot_id: action.snapshot.id,
               feature_profile_id: action.result.profile.profile_id,
             },
@@ -448,6 +466,7 @@ export function workbenchReducer(
           source_data_revision: action.source_data_revision,
           executed: action.snapshot,
           request_status: "ready",
+          active_request_id: null,
           error: null,
         },
       };
@@ -493,15 +512,25 @@ export function workbenchReducer(
     case "QUANTUM_CIRCUIT":
       return { ...state, quantum: { ...state.quantum, circuit: action.circuit } };
     case "QUANTUM_REQUEST":
+      if (
+        action.status !== "loading" &&
+        action.request_id !== undefined &&
+        action.request_id !== state.quantum.active_request_id
+      ) return state;
       return {
         ...state,
         quantum: {
           ...state.quantum,
           request_status: action.status,
+          active_request_id:
+            action.status === "loading"
+              ? action.request_id ?? null
+              : null,
           error: action.error ?? null,
         },
       };
     case "QUANTUM_RESULT":
+      if (action.request_id !== state.quantum.active_request_id) return state;
       return {
         ...state,
         quantum: {
@@ -513,9 +542,7 @@ export function workbenchReducer(
               experiment_id: action.theta_snapshot.id,
               artifact_id: `quantum-artifact-${action.preview.preview_id}`,
               created_at: action.theta_snapshot.executed_at,
-              input_artifact_ids: state.features.computed
-                ? [state.features.computed.provenance.artifact_id]
-                : [],
+              input_artifact_ids: action.input_artifact_ids,
               theta_snapshot_id: action.theta_snapshot.id,
               feature_profile_id: action.preview.feature_profile.profile_id,
               scaler_version: action.preview.scaler.version,
@@ -525,6 +552,7 @@ export function workbenchReducer(
           },
           theta_executed: action.theta_snapshot,
           request_status: "ready",
+          active_request_id: null,
           error: null,
         },
       };

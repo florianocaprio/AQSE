@@ -15,6 +15,7 @@ Stato corrente:
 - la preview locale usa `AngleScaler`, il VQC fornito e il TQK a **theta fisso**;
 - la modalità self-reference è esclusivamente esplorativa, non una valutazione predittiva;
 - il QNG scientifico esiste nel codice dell'autore, ma il training sui dati sensoriali non è collegato;
+- Milestone 1D.1 implementa esclusivamente dataset offline immutabili, lineage e split per episodio; non implementa encoding di produzione né training;
 - AFSE ha soltanto un confine architetturale: la matematica non è implementata;
 - rete neurale, output engine e QPU fisica non sono implementati;
 - non vengono inventati VQC, kernel, loss, QNG o algoritmi AQSE aggiuntivi.
@@ -44,6 +45,7 @@ Synthetic field providers
 - `frontend/`: React, TypeScript, Vite e una GUI tecnica in inglese.
 - `backend/app/network/`: fisica sintetica, moto, sensori, sessioni, eventi, buffer, SSE e osservabilità.
 - `backend/app/features/`: estrazione finestrata, qualità e provenienza delle feature.
+- `backend/app/training/`: generazione offline 1D.1, digest canonici, split per lineage e storage sealed.
 - `backend/app/quantum/preview.py`: adapter applicativo limitato per la preview a theta fisso.
 - `backend/app/quantum/user_pipeline/`: implementazione scientifica fornita dall'autore.
 - `docs/`: contratti, limiti scientifici e piano di validazione.
@@ -141,6 +143,26 @@ Le porte e il target del proxy Vite possono essere modificati partendo da `.env.
 Le porte sono pubblicate soltanto sull'interfaccia loopback `127.0.0.1`; il banco
 non espone servizi alla rete locale per impostazione predefinita.
 
+### Artefatti dataset Milestone 1D.1
+
+I dataset non sono serviti da API e non sono generati all'avvio. Il comando offline
+seguente esegue prima il pilot controllato e, solo se il gate di copertura è valido,
+crea il dataset di sviluppo:
+
+```sh
+docker compose run --rm backend python scripts/generate_training_dataset.py
+```
+
+Per impostazione predefinita gli artefatti host sono scritti nella directory sorella
+`../AQSE-artifacts`, montata nel container come `/artifacts`. Il percorso è configurabile
+con `AQSE_ARTIFACT_ROOT`; `AQSE_ARTIFACT_LIMIT_BYTES` impone il limite operativo
+predefinito di 1 GiB includendo file temporanei. Manifest e payload scientifici sono
+read-only, mentre il ledger di accesso al test è concatenato e append-only.
+
+Le osservazioni, le otto feature e le etichette sono file distinti. Il test di sviluppo
+è serializzato e verificato dall'archiver, ma resta sealed: la normale API di caricamento
+lo rifiuta e 1D.1 non ne stampa distribuzioni di qualità né metriche predittive.
+
 ### Percorso demo consigliato
 
 1. Aprire la worksheet **Sensors** e caricare il preset `Quantum preview signal`.
@@ -212,6 +234,7 @@ AQSE/
 │   │   ├── network/
 │   │   ├── preprocessing/
 │   │   ├── sensors/
+│   │   ├── training/
 │   │   └── quantum/
 │   │       └── user_pipeline/
 │   ├── scripts/

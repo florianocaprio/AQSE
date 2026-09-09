@@ -347,6 +347,24 @@ export function useNetworkStream() {
 
 export function useWorkbenchActions() {
   const { state, dispatch } = useWorkbench();
+  const featureRequestRef = useRef<string | null>(null);
+  const quantumRequestRef = useRef<string | null>(null);
+  const featureInputIdentityRef = useRef("");
+  const quantumInputIdentityRef = useRef("");
+  featureInputIdentityRef.current = JSON.stringify([
+    state.network.session?.session_id ?? null,
+    state.network.data_revision,
+    state.network.selected_node_id,
+    state.network.executed?.id ?? null,
+    state.features.channel,
+    state.features.draft.revision,
+  ]);
+  quantumInputIdentityRef.current = JSON.stringify([
+    state.features.computed?.provenance.artifact_id ?? null,
+    state.quantum.theta_draft.revision,
+    state.quantum.backend,
+    state.quantum.preview_size,
+  ]);
 
   const loadNetworkDefaults = useCallback(
     async (nodeCount: number) => {
@@ -594,6 +612,8 @@ export function useWorkbenchActions() {
   );
 
   const extractFeatures = useCallback(async () => {
+    const requestId = uniqueId("feature-request");
+    featureRequestRef.current = requestId;
     const sensorId = state.network.selected_node_id;
     const config = state.network.executed?.value ?? state.network.draft?.value;
     const sessionId = state.network.session?.session_id;
@@ -614,6 +634,7 @@ export function useWorkbenchActions() {
     }
 
     const draft = state.features.draft;
+    const inputIdentity = featureInputIdentityRef.current;
     const sourceDataRevision = state.network.data_revision;
     const requiredSamples = Math.max(
       16,
@@ -627,19 +648,34 @@ export function useWorkbenchActions() {
       });
       return;
     }
-    dispatch({ type: "FEATURE_REQUEST", status: "loading" });
+    const inputArtifactIds = state.network.executed
+      ? [state.network.executed.id]
+      : [];
+    dispatch({ type: "FEATURE_REQUEST", status: "loading", request_id: requestId });
     try {
       const result = await extractVectorMagnetometerFeatures({
         series,
         channel: state.features.channel,
         window: draft.value,
       });
+      if (featureRequestRef.current !== requestId) return;
+      if (featureInputIdentityRef.current !== inputIdentity) {
+        dispatch({
+          type: "FEATURE_REQUEST",
+          status: "failed",
+          request_id: requestId,
+          error: "Sensor data or feature configuration changed during extraction; the obsolete response was discarded.",
+        });
+        return;
+      }
       dispatch({
         type: "FEATURE_RESULT",
         result,
         source_session_id: sessionId,
         source_data_revision: sourceDataRevision,
         snapshot: snapshot(draft.value, draft.revision, "features"),
+        request_id: requestId,
+        input_artifact_ids: inputArtifactIds,
       });
       dispatch({
         type: "EXPERIMENT_ADD",
@@ -666,15 +702,19 @@ export function useWorkbenchActions() {
         },
       });
     } catch (error: unknown) {
+      if (featureRequestRef.current !== requestId) return;
       dispatch({
         type: "FEATURE_REQUEST",
         status: "failed",
+        request_id: requestId,
         error: errorMessage(error, "Feature extraction failed."),
       });
     }
   }, [dispatch, state.features.channel, state.features.draft, state.network]);
 
   const previewQuantum = useCallback(async () => {
+    const requestId = uniqueId("quantum-request");
+    quantumRequestRef.current = requestId;
     const result = state.features.result;
     if (!result || !state.features.source_session_id) return;
     const referenceWindows = result.windows
@@ -690,7 +730,11 @@ export function useWorkbenchActions() {
     }
 
     const thetaDraft = state.quantum.theta_draft;
-    dispatch({ type: "QUANTUM_REQUEST", status: "loading" });
+    const inputIdentity = quantumInputIdentityRef.current;
+    const inputArtifactIds = state.features.computed
+      ? [state.features.computed.provenance.artifact_id]
+      : [];
+    dispatch({ type: "QUANTUM_REQUEST", status: "loading", request_id: requestId });
     try {
       const preview = await runQuantumPreview({
         mode: "self_reference",
@@ -701,12 +745,28 @@ export function useWorkbenchActions() {
         query_windows: [],
         theta: [...thetaDraft.value],
       });
+      if (quantumRequestRef.current !== requestId) return;
+      if (quantumInputIdentityRef.current !== inputIdentity) {
+        dispatch({
+          type: "QUANTUM_REQUEST",
+          status: "failed",
+          request_id: requestId,
+          error: "Feature input or quantum configuration changed during preview; the obsolete response was discarded.",
+        });
+        return;
+      }
       const thetaSnapshot = snapshot(
         thetaDraft.value,
         thetaDraft.revision,
         "theta",
       );
-      dispatch({ type: "QUANTUM_RESULT", preview, theta_snapshot: thetaSnapshot });
+      dispatch({
+        type: "QUANTUM_RESULT",
+        preview,
+        theta_snapshot: thetaSnapshot,
+        request_id: requestId,
+        input_artifact_ids: inputArtifactIds,
+      });
       dispatch({
         type: "EXPERIMENT_ADD",
         experiment: {
@@ -733,9 +793,11 @@ export function useWorkbenchActions() {
         },
       });
     } catch (error: unknown) {
+      if (quantumRequestRef.current !== requestId) return;
       dispatch({
         type: "QUANTUM_REQUEST",
         status: "failed",
+        request_id: requestId,
         error: errorMessage(error, "Quantum preview failed."),
       });
     }

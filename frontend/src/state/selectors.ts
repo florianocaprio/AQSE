@@ -39,14 +39,12 @@ export function chartPointsForSensor(
 ): NetworkChartPoint[] {
   return frames.slice(-maximumPoints).map((frame) => {
     const reading = readingForSensor(frame, sensorId);
-    const isObservableSample = Boolean(
+    const hasReceivedPayload = Boolean(
       reading &&
-      !reading.quality_flags.some((flag) =>
-        flag === "stuck" || flag === "signal_absent" || flag === "clock_error"
-      ) &&
-      (reading.valid || reading.quality_flags.includes("clipped")),
+      !reading.quality_flags.includes("signal_absent") &&
+      (reading.components_T !== null || reading.value_T !== null),
     );
-    const components = isObservableSample ? reading?.components_T : null;
+    const components = hasReceivedPayload ? reading?.components_T : null;
     return {
       frame_id: frame.frame_id,
       time_s: frame.sim_time_s,
@@ -54,7 +52,7 @@ export function chartPointsForSensor(
       y_nt: components ? components[1] * 1e9 : null,
       z_nt: components ? components[2] * 1e9 : null,
       scalar_nt:
-        !isObservableSample || reading?.value_T === null || reading?.value_T === undefined
+        !hasReceivedPayload || reading?.value_T === null || reading?.value_T === undefined
           ? null
           : reading.value_T * 1e9,
       valid: reading?.valid ?? false,
@@ -90,14 +88,15 @@ export function latestContiguousVectorSeries(
       reading.saturation_mask?.some(Boolean) &&
       reading.quality_flags.every((flag) => flag === "clipped"),
     );
-    const isUsable =
-      frameIsContiguous &&
+    const isUsableReading =
       reading?.measurement_mode === "vector" &&
       !reading.quality_flags.includes("clock_error") &&
+      !reading.quality_flags.includes("stuck") &&
       (reading.valid || isClippedObservation) &&
       reading.components_T !== null;
 
-    if (!isUsable) {
+    if (!frameIsContiguous) segment = [];
+    if (!isUsableReading) {
       segment = [];
     } else {
       segment.push({ frame, reading, components: reading.components_T as Vector3 });

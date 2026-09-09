@@ -23,7 +23,7 @@ export function QngWorksheet() {
         </article>
         <article className="workbench-panel">
           <p className="panel-kicker">CURRENT STATUS</p>
-          <h2>Architecture only</h2>
+          <h2>Scientific engine available; sensor training not connected</h2>
           <p className="empty-copy">{capability?.detail ?? "QNG capability metadata has not been received."}</p>
           <dl className="quality-grid"><div><dt>Training dataset</dt><dd>not configured</dd></div><div><dt>Objective</dt><dd>not configured</dd></div><div><dt>Optimizer state</dt><dd>not created</dd></div><div><dt>θ updates</dt><dd>none</dd></div></dl>
         </article>

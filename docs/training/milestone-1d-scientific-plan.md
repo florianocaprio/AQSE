@@ -4,12 +4,12 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **1D.0 design proposal — awaiting Floriano's scientific approval** |
+| Status | **1D.0 approved; 1D.1 dataset increment implemented and awaiting review** |
 | Date | 2026-09-09 |
 | Working branch | `codex/milestone-1d-tqk-training` |
 | Working baseline | `1cb07cdccabf9c655a63f2b23aab37383ae90b69` |
 | Milestone 1C tag | `milestone-1c` → `95c5483c0192ba7605713c428e02b2527ab1f919` |
-| Production behavior changed by 1D.0 | No |
+| Production training behavior changed through 1D.1 | No |
 
 The master prompt named `95c5483` as both the tag and `main` baseline. Before
 this work, the approved infrastructure-health patch had intentionally advanced
@@ -17,8 +17,9 @@ this work, the approved infrastructure-health patch had intentionally advanced
 `95c5483`. This branch therefore starts from the current, clean `origin/main`
 and retains that patch. No history or tag was rewritten.
 
-This document specifies decisions for later Milestone 1D increments. It does
-not authorize or claim a production training service, a new active encoder,
+This document records the approved 1D.0 decisions. The separate 1D.1 validation
+record documents their bounded dataset implementation. Neither document
+authorizes or claims a production training service, a new active encoder,
 AFSE mathematics, a neural model, or continuous inference.
 
 ## 1. Existing boundary and terminology

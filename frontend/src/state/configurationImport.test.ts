@@ -199,7 +199,12 @@ describe("network configuration import", () => {
       },
     });
     const featureResult = createFeatureResult();
-    const withFeatures = workbenchReducer(withSession, {
+    const featureLoading = workbenchReducer(withSession, {
+      type: "FEATURE_REQUEST",
+      status: "loading",
+      request_id: "feature-request-1",
+    });
+    const withFeatures = workbenchReducer(featureLoading, {
       type: "FEATURE_RESULT",
       result: featureResult,
       source_session_id: session.session_id,
@@ -210,9 +215,16 @@ describe("network configuration import", () => {
         source_revision: withSession.features.draft.revision,
         executed_at: "2026-09-08T00:00:04Z",
       },
+      request_id: "feature-request-1",
+      input_artifact_ids: ["network-snapshot-1"],
     });
     const theta = Array.from({ length: 16 }, () => 0) as unknown as ThetaVector;
-    const withQuantum = workbenchReducer(withFeatures, {
+    const quantumLoading = workbenchReducer(withFeatures, {
+      type: "QUANTUM_REQUEST",
+      status: "loading",
+      request_id: "quantum-request-1",
+    });
+    const withQuantum = workbenchReducer(quantumLoading, {
       type: "QUANTUM_RESULT",
       preview: createQuantumPreview(featureResult),
       theta_snapshot: {
@@ -221,6 +233,8 @@ describe("network configuration import", () => {
         source_revision: withFeatures.quantum.theta_draft.revision,
         executed_at: "2026-09-08T00:00:05Z",
       },
+      request_id: "quantum-request-1",
+      input_artifact_ids: ["feature-artifact-feature-snapshot-1"],
     });
 
     expect(networkResultIsStale(withQuantum)).toBe(false);

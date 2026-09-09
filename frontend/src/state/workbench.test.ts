@@ -140,4 +140,41 @@ describe("workbench reducer", () => {
       JSON.parse(JSON.stringify(next.experiments))[0].request_snapshot,
     ).toEqual(requestSnapshot);
   });
+
+  it("ignores late failures from superseded feature and quantum requests", () => {
+    const initial = createInitialWorkbenchState();
+    const firstFeature = workbenchReducer(initial, {
+      type: "FEATURE_REQUEST",
+      status: "loading",
+      request_id: "feature-old",
+    });
+    const currentFeature = workbenchReducer(firstFeature, {
+      type: "FEATURE_REQUEST",
+      status: "loading",
+      request_id: "feature-current",
+    });
+    expect(workbenchReducer(currentFeature, {
+      type: "FEATURE_REQUEST",
+      status: "failed",
+      request_id: "feature-old",
+      error: "obsolete",
+    })).toBe(currentFeature);
+
+    const firstQuantum = workbenchReducer(currentFeature, {
+      type: "QUANTUM_REQUEST",
+      status: "loading",
+      request_id: "quantum-old",
+    });
+    const currentQuantum = workbenchReducer(firstQuantum, {
+      type: "QUANTUM_REQUEST",
+      status: "loading",
+      request_id: "quantum-current",
+    });
+    expect(workbenchReducer(currentQuantum, {
+      type: "QUANTUM_REQUEST",
+      status: "failed",
+      request_id: "quantum-old",
+      error: "obsolete",
+    })).toBe(currentQuantum);
+  });
 });
