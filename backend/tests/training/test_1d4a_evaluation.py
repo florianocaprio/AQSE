@@ -29,8 +29,9 @@ from app.training.evaluation_storage import (
     load_model_selection_freeze,
     write_evaluation_protocol,
 )
-from app.training.seal import verify_canonical_test_seal
-from app.training.storage import artifact_root
+from app.training.held_out import LABEL_REASON, OBSERVATION_REASON
+from app.training.held_out_storage import read_test_ledger_opaque
+from app.training.storage import artifact_root, verify_archive_opaque
 
 
 def test_protocol_is_deterministic_finite_and_keeps_test_sealed() -> None:
@@ -205,7 +206,7 @@ def test_quantum_cross_kernel_is_query_order_invariant() -> None:
     np.testing.assert_allclose(reordered, expected[order], atol=1.0e-14)
 
 
-def test_published_1d4a_evidence_keeps_canonical_test_sealed() -> None:
+def test_published_1d4a_evidence_preserves_its_pre_test_freeze() -> None:
     root = artifact_root()
     protocol = build_evaluation_protocol()
     protocol_path = root / "evaluation-protocols" / protocol.protocol_id
@@ -230,16 +231,25 @@ def test_published_1d4a_evidence_keeps_canonical_test_sealed() -> None:
     assert build_model_selection_freeze(protocol, evaluation) == freeze
     assert protocol_execution.created_at_utc <= evaluation_execution.created_at_utc
     assert evaluation_execution.created_at_utc <= freeze_execution.created_at_utc
-    assert not any(
-        item.name.startswith("aqse-test-bank") for item in (root / "banks").iterdir()
-    )
-    manifest, ledger_digest = verify_canonical_test_seal(
-        root / "aqse-development-064acca20fc788c6"
-    )
+    dataset_path = root / "aqse-development-064acca20fc788c6"
+    manifest = verify_archive_opaque(dataset_path)
+    ledger = read_test_ledger_opaque(dataset_path)
     assert manifest.test_state == "sealed"
-    assert ledger_digest == (
+    assert evaluation.test_state_after == "sealed"
+    assert freeze.test_state == "sealed"
+    assert freeze.test_ledger_sha256 == (
         "210077e41754c47eebe572660f07b7cdaf8653ade2945fccd368e04d64a432c6"
     )
+    if len(ledger.entries) == 1:
+        assert ledger.file_sha256 == freeze.test_ledger_sha256
+        assert not (root / "test-banks").exists()
+    else:
+        assert len(ledger.entries) == 3
+        assert tuple(item.reason for item in ledger.entries[1:]) == (
+            OBSERVATION_REASON,
+            LABEL_REASON,
+        )
+        assert len(tuple((root / "test-banks").glob("aqse-test-bank-*"))) == 1
     comparison = assemble_comparison_input(
         dataset_path=root / protocol.dataset_id,
         encoder_path=root / "encoders" / protocol.encoder_id,

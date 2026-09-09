@@ -16,6 +16,8 @@ Repository state verified at the start of Milestone 1D:
   `ab5bff99fa9779a143e236595c0d4c1e78ff349f`;
 - branch HEAD at the approved 1D.4a entry gate:
   `1b4435b2699066211aa2e9bb8e9cd8cd0b8af82b`;
+- branch HEAD at the approved 1D.4b entry gate:
+  `81045762d69c6a82c63e47196a2ae36899786233`;
 - underlying `main` baseline: `1cb07cdccabf9c655a63f2b23aab37383ae90b69`;
 - `main` and `origin/main` also resolve to `1cb07cdccabf9c655a63f2b23aab37383ae90b69`;
 - the `milestone-1c` tag remains at the peeled commit
@@ -32,7 +34,7 @@ Repository state verified at the start of Milestone 1D:
 | **1A** | Author-supplied TQK8 scientific engine | Original 8-qubit VQC, fidelity kernel, alignment loss, numerical derivatives, Fubini--Study metric, and QNG implementation are present with their original tests | **Complete baseline** |
 | **1B** | Initial magnetometer simulator | Scalar finite simulation and the legacy eight-feature harmonic profile are available | **Complete baseline** |
 | **1C** | Vector/network workbench | Causal 1--8-node simulator, observation/truth separation, feature windows, quality/provenance controls, and bounded fixed-theta kernel preview are implemented | **Complete, merged, and tagged** at `95c5483` |
-| **1D** | Controlled datasets and TQK training validation | Reproducible labelled experiments, compatible encoding, bounded training, held-out comparison, checkpoints, and controlled workbench integration | **Current milestone; G4 closed and 1D.4a implemented, awaiting G5 review** |
+| **1D** | Controlled datasets and TQK training validation | Reproducible labelled experiments, compatible encoding, bounded training, held-out comparison, checkpoints, and controlled workbench integration | **Current milestone; G5 closed and 1D.4b implemented, awaiting scientific review** |
 | **1E** | Local Functional Embedding / AFSE | A mathematically approved, fixed-size, versioned local representation | **Future and unapproved** |
 | **1F** | Classical model | A frozen classical model consuming the approved AFSE representation | **Future and unapproved** |
 | **1G** | Continuous inference and network analysis | Causal predictions, latency/queue accounting, network-level evaluation, and controlled model promotion | **Future and unapproved** |
@@ -52,8 +54,8 @@ authorize the next one.
 | **1D.1** | Immutable experiment datasets, independent label channel, durable lineage, exclusions, and grouped train/validation/test splits | Deterministic regeneration, replay deduplication, raw-interval isolation, and group isolation are demonstrated | **Approved and canonically frozen as archive v2** |
 | **1D.2** | Approved input encoding and phase policy, fitted-preprocessing boundary, compatibility rules, and baseline preparation | Periodicity, seam continuity, train-only fitting, and incompatible-artifact rejection are demonstrated | **Scientifically approved; Gate G3 closed** |
 | **1D.3** | Bounded training jobs using the unchanged author-supplied QNG implementation | Wrapper equivalence, deterministic trajectory identity, execution-intent idempotence, real accepted-step history, cancellation, bounded concurrency, and resource limits are validated | **Scientifically approved; Gate G4 closed** |
-| **1D.4a** | TRAIN/VALIDATION classical/quantum comparison and model-selection freeze | Method budgets, selected configurations/checkpoints and the later final procedure are immutable before TEST opening | **Implemented; awaiting external Gate G5 review** |
-| **1D.4b** | One final held-out evaluation of the frozen selections | Negative and inconclusive results are preserved; TEST is opened only after explicit G5 closure | **Blocked; not authorized** |
+| **1D.4a** | TRAIN/VALIDATION classical/quantum comparison and model-selection freeze | Method budgets, selected configurations/checkpoints and the later final procedure are immutable before TEST opening | **Scientifically approved; Gate G5 closed** |
+| **1D.4b** | One final held-out evaluation of the frozen selections | Negative and inconclusive results are preserved; TEST is opened only after explicit G5 closure | **Implemented; awaiting scientific review** |
 | **1D.5** | Workbench controls, checkpoint persistence, and explicit application of compatible trained theta | No automatic training or promotion; stale results and downstream invalidation are enforced | **Planned; not authorized** |
 | **1D.6** | Consolidation, regression, local acceptance, and external review | Full validation passes and a separately authorized review/merge decision is made | **Planned; not authorized** |
 
@@ -64,10 +66,12 @@ non-canonical duplicate without rewriting either artifact. Durable versioned
 execution intents prevent replay from starting a second worker. Milestone
 1D.4a now adds an immutable, predeclared TRAIN/VALIDATION comparison and freezes
 one configuration per approved method plus the later final-evaluation
-procedure. There is still no active model, TEST result, AFSE mathematics,
-classical/neural production model, GUI training control or automatic
-checkpoint application. The selected configurations are not connected to the
-Milestone 1C preview.
+procedure. Milestone 1D.4b now adds the single authorized held-out evaluation:
+24/24 TEST lineages were eligible, the ledger records exactly two semantic
+loads, and no result changed the freeze. There is still no active or promoted
+model, AFSE mathematics, classical/neural production model, GUI training
+control or automatic checkpoint application. The selected configurations are
+not connected to the Milestone 1C preview.
 
 ## Training and inference are separate paths
 
@@ -198,7 +202,7 @@ legacy semantics or add a ninth quantum input.
 | **G2 — dataset freeze** | Dataset manifest, independent labels, grouped splits, duplicate/raw-overlap checks, eligibility reporting, and sealed test policy pass review | Production encoding and optimization |
 | **G3 — representation compatibility** | Approved encoding is periodic where required, fitted on training only, versioned, and rejects incompatible artifacts | Training jobs and checkpoints |
 | **G4 — bounded training** | Unchanged QNG wrapper equivalence, deterministic trajectory identity, execution-intent idempotence, concurrency/cancellation behavior, deterministic initialization, actual history, and real-load compute/memory/responsiveness limits are validated | Evaluation claims and UI application |
-| **G5 — model selection freeze** | Classical and quantum comparisons use matched information and declared budgets; validation selects the checkpoint before the test set is opened | Held-out claims and model promotion |
+| **G5 — model selection freeze** | Classical and quantum comparisons use matched information and declared budgets; validation selects the checkpoint before the test set is opened | **Closed before the single 1D.4b held-out evaluation; model promotion remains blocked** |
 | **G6 — controlled integration** | Explicit checkpoint application, stale-result invalidation, artifact lineage, simulator responsiveness, and honest UI labels are validated | Release or merge |
 | **G7 — external acceptance** | Full regression, local build, manual acceptance, external scientific/code review, and separate merge authorization | Merge into `main`, release, or subsequent milestone |
 
@@ -239,6 +243,8 @@ promotion.
 - [Milestone 1D.3 validation record](../validation/milestone-1d-3-qng-training.md)
 - [Milestone 1D.4a comparative evaluation](../training/milestone-1d-4a-comparative-evaluation.md)
 - [Milestone 1D.4a validation record](../validation/milestone-1d-4a-comparative-evaluation.md)
+- [Milestone 1D.4b final held-out evaluation](../training/milestone-1d-4b-held-out-evaluation.md)
+- [Milestone 1D.4b validation record](../validation/milestone-1d-4b-held-out-evaluation.md)
 - [Milestone 1D.0 design and compatibility audit](../validation/milestone-1d-design-audit.md)
 - [Canonical AQSE pipeline](../architecture/canonical-aqse-pipeline.md)
 - [Scientific scope and limitations](../architecture/scientific-scope-and-limitations.md)

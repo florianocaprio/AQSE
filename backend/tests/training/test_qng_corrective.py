@@ -21,12 +21,13 @@ from app.training.execution_intent import (
     EngineeringBenchmarkIntent,
     TrainingExecutionIntent,
 )
+from app.training.held_out import LABEL_REASON, OBSERVATION_REASON
+from app.training.held_out_storage import read_test_ledger_opaque
 from app.training.intent_storage import FileExecutionIntentStore
 from app.training.run_models import EvaluationCounters, TrainingJobState
 from app.training.run_storage import load_training_run_artifact
-from app.training.seal import verify_canonical_test_seal
 from app.training.service import TrainingJobService
-from app.training.storage import artifact_root
+from app.training.storage import artifact_root, verify_archive_opaque
 from app.training.trajectory import (
     QngTrajectoryContent,
     build_trajectory_audit_mapping,
@@ -98,13 +99,20 @@ def test_historical_runs_are_unchanged_and_share_one_trajectory_identity() -> No
     assert file_sha256(paths[DESIGNATED_ID] / "run.json") == RUN_SHA256[DESIGNATED_ID]
     assert file_sha256(paths[DUPLICATE_ID] / "run.json") == RUN_SHA256[DUPLICATE_ID]
     assert identities[DESIGNATED_ID] == identities[DUPLICATE_ID]
-    manifest, ledger_digest = verify_canonical_test_seal(
-        root / "aqse-development-064acca20fc788c6"
-    )
+    dataset_path = root / "aqse-development-064acca20fc788c6"
+    manifest = verify_archive_opaque(dataset_path)
+    ledger = read_test_ledger_opaque(dataset_path)
     assert manifest.test_state == "sealed"
-    assert ledger_digest == (
-        "210077e41754c47eebe572660f07b7cdaf8653ade2945fccd368e04d64a432c6"
-    )
+    if len(ledger.entries) == 1:
+        assert ledger.file_sha256 == (
+            "210077e41754c47eebe572660f07b7cdaf8653ade2945fccd368e04d64a432c6"
+        )
+    else:
+        assert len(ledger.entries) == 3
+        assert tuple(item.reason for item in ledger.entries[1:]) == (
+            OBSERVATION_REASON,
+            LABEL_REASON,
+        )
 
 
 def test_trajectory_identity_excludes_runtime_measurements() -> None:
