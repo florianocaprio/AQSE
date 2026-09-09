@@ -12,7 +12,8 @@ Repository state verified at the start of Milestone 1D:
 
 - repository: `florianocaprio/AQSE`;
 - current milestone branch: `codex/milestone-1d-tqk-training`;
-- branch HEAD at the 1D.2 entry gate: `45d3a318c9818a43e6011883617c656f9a5ea4d9`;
+- branch HEAD at the approved 1D.3 entry gate:
+  `ab5bff99fa9779a143e236595c0d4c1e78ff349f`;
 - underlying `main` baseline: `1cb07cdccabf9c655a63f2b23aab37383ae90b69`;
 - `main` and `origin/main` also resolve to `1cb07cdccabf9c655a63f2b23aab37383ae90b69`;
 - the `milestone-1c` tag remains at the peeled commit
@@ -29,7 +30,7 @@ Repository state verified at the start of Milestone 1D:
 | **1A** | Author-supplied TQK8 scientific engine | Original 8-qubit VQC, fidelity kernel, alignment loss, numerical derivatives, Fubini--Study metric, and QNG implementation are present with their original tests | **Complete baseline** |
 | **1B** | Initial magnetometer simulator | Scalar finite simulation and the legacy eight-feature harmonic profile are available | **Complete baseline** |
 | **1C** | Vector/network workbench | Causal 1--8-node simulator, observation/truth separation, feature windows, quality/provenance controls, and bounded fixed-theta kernel preview are implemented | **Complete, merged, and tagged** at `95c5483` |
-| **1D** | Controlled datasets and TQK training validation | Reproducible labelled experiments, compatible encoding, bounded training, held-out comparison, checkpoints, and controlled workbench integration | **Current milestone; 1D.2 implemented and awaiting external review** |
+| **1D** | Controlled datasets and TQK training validation | Reproducible labelled experiments, compatible encoding, bounded training, held-out comparison, checkpoints, and controlled workbench integration | **Current milestone; 1D.3 implemented and awaiting external review** |
 | **1E** | Local Functional Embedding / AFSE | A mathematically approved, fixed-size, versioned local representation | **Future and unapproved** |
 | **1F** | Classical model | A frozen classical model consuming the approved AFSE representation | **Future and unapproved** |
 | **1G** | Continuous inference and network analysis | Causal predictions, latency/queue accounting, network-level evaluation, and controlled model promotion | **Future and unapproved** |
@@ -47,16 +48,19 @@ authorize the next one.
 | --- | --- | --- | --- |
 | **1D.0** | Scientific contract, compatibility audit, baseline validation, and isolated non-production diagnostic probes | Evidence and open decisions are reviewed; Floriano gives an explicit scientific decision on the proposed task, phase treatment, data independence, budgets, and boundaries | **Completed decision gate** |
 | **1D.1** | Immutable experiment datasets, independent label channel, durable lineage, exclusions, and grouped train/validation/test splits | Deterministic regeneration, replay deduplication, raw-interval isolation, and group isolation are demonstrated | **Approved and canonically frozen as archive v2** |
-| **1D.2** | Approved input encoding and phase policy, fitted-preprocessing boundary, compatibility rules, and baseline preparation | Periodicity, seam continuity, train-only fitting, and incompatible-artifact rejection are demonstrated | **Implemented; awaiting external scientific review** |
-| **1D.3** | Bounded training jobs using the unchanged author-supplied QNG implementation | Wrapper equivalence, real accepted-step history, cancellation, bounded concurrency, and resource limits are validated | **Planned; not authorized** |
+| **1D.2** | Approved input encoding and phase policy, fitted-preprocessing boundary, compatibility rules, and baseline preparation | Periodicity, seam continuity, train-only fitting, and incompatible-artifact rejection are demonstrated | **Scientifically approved; Gate G3 closed** |
+| **1D.3** | Bounded training jobs using the unchanged author-supplied QNG implementation | Wrapper equivalence, real accepted-step history, cancellation, bounded concurrency, and resource limits are validated | **Implemented; awaiting external scientific review** |
 | **1D.4** | Held-out evaluation and matched classical/quantum comparisons | Model selection is frozen before test opening; negative and inconclusive results are preserved | **Planned; not authorized** |
 | **1D.5** | Workbench controls, checkpoint persistence, and explicit application of compatible trained theta | No automatic training or promotion; stale results and downstream invalidation are enforced | **Planned; not authorized** |
 | **1D.6** | Consolidation, regression, local acceptance, and external review | Full validation passes and a separately authorized review/merge decision is made | **Planned; not authorized** |
 
-Through 1D.2 no production training endpoint, trained theta, trained sensor
-result, AFSE mathematics, classical/neural model, or automatic checkpoint
-application has been activated. The phase-direct encoder is an offline,
-versioned artifact and is not connected to the Milestone 1C preview.
+Through 1D.3 one explicit, bounded TRAIN-only job endpoint and one designated
+immutable candidate-theta trajectory exist. The validation record also retains
+an accidental identical non-canonical duplicate for audit. There is still no
+active model, held-out result, validation-selected theta, AFSE mathematics,
+classical/neural model, GUI training control or automatic checkpoint
+application. The phase-direct encoder and candidate theta are not connected to
+the Milestone 1C preview.
 
 ## Training and inference are separate paths
 
@@ -70,7 +74,7 @@ labelled training observations
         -> TQK Gram matrix
         -> centred-alignment loss
         -> supplied QNG optimizer
-        -> candidate theta/checkpoint
+        -> immutable candidate-theta run artifact
 ```
 
 Labels are inputs to the training objective only. Truth, simulator seeds,
@@ -93,9 +97,8 @@ measured observation
 The current Milestone 1C path stops at an explicit fixed-theta fidelity-kernel
 preview. A Gram matrix is relational batch geometry, not AFSE, and the existing
 demonstration SVC is a possible research evaluator rather than the final AQSE
-classical model. Training output in 1D will therefore be a versioned
-encoder/kernel artifact, not a fabricated local embedding or deployed
-prediction.
+classical model. The implemented 1D.3 output is a versioned candidate-theta run
+artifact, not a fabricated local embedding or deployed prediction.
 
 ## Proposed first 1D experiment
 
@@ -225,6 +228,8 @@ promotion.
 - [Milestone 1D scientific training plan](../training/milestone-1d-scientific-plan.md)
 - [Milestone 1D.2 phase-direct encoding](../training/milestone-1d-2-encoding.md)
 - [Milestone 1D.2 validation record](../validation/milestone-1d-2-encoding.md)
+- [Milestone 1D.3 bounded QNG training](../training/milestone-1d-3-qng-training.md)
+- [Milestone 1D.3 validation record](../validation/milestone-1d-3-qng-training.md)
 - [Milestone 1D.0 design and compatibility audit](../validation/milestone-1d-design-audit.md)
 - [Canonical AQSE pipeline](../architecture/canonical-aqse-pipeline.md)
 - [Scientific scope and limitations](../architecture/scientific-scope-and-limitations.md)

@@ -1,6 +1,5 @@
 import logging
 from importlib.metadata import PackageNotFoundError, version
-from threading import BoundedSemaphore
 from time import perf_counter
 
 from fastapi import APIRouter, HTTPException, status
@@ -10,11 +9,12 @@ from app.quantum.adapter import (
     quantum_engine_metadata,
     run_quantum_infrastructure_smoke_test,
 )
+from app.quantum.admission import heavy_quantum_slot
 from app.quantum.user_pipeline.tqk8 import EDGES
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-diagnostics_slot = BoundedSemaphore(value=1)
+diagnostics_slot = heavy_quantum_slot
 
 
 class QuantumHealthResponse(BaseModel):

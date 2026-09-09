@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def test_1d1_has_no_training_quantum_or_neural_execution_path() -> None:
+def test_training_layer_has_no_direct_qiskit_or_neural_dependency() -> None:
     training_root = Path("app/training")
     source = "\n".join(
         path.read_text(encoding="utf-8") for path in sorted(training_root.glob("*.py"))
@@ -20,8 +20,11 @@ def test_1d1_has_no_training_quantum_or_neural_execution_path() -> None:
     assert "fit_transform(" not in source
 
 
-def test_1d1_is_offline_and_registers_no_application_router() -> None:
+def test_training_is_explicit_and_never_runs_from_application_startup() -> None:
     application = Path("app/main.py").read_text(encoding="utf-8")
-    assert "app.training" not in application
-    assert "/training" not in application
+    training_api = Path("app/api/training.py").read_text(encoding="utf-8")
+    assert "training_router" in application
+    assert "@router.post" in training_api
+    assert "@router.get" in training_api
+    assert "startup" not in training_api.lower()
     assert "/datasets" not in application

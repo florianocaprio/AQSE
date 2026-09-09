@@ -4,12 +4,12 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **1D.1 approved and frozen; 1D.2 encoding increment implemented and awaiting review** |
+| Status | **1D.1 frozen; 1D.2 approved/G3 closed; 1D.3 implemented and awaiting review** |
 | Date | 2026-09-09 |
 | Working branch | `codex/milestone-1d-tqk-training` |
-| Working baseline | `1cb07cdccabf9c655a63f2b23aab37383ae90b69` |
+| 1D.3 approved entry HEAD | `ab5bff99fa9779a143e236595c0d4c1e78ff349f` |
 | Milestone 1C tag | `milestone-1c` → `95c5483c0192ba7605713c428e02b2527ab1f919` |
-| Production training behavior changed through 1D.2 | No |
+| Active/promoted model through 1D.3 | None |
 
 The master prompt named `95c5483` as both the tag and `main` baseline. Before
 this work, the approved infrastructure-health patch had intentionally advanced
@@ -18,9 +18,10 @@ this work, the approved infrastructure-health patch had intentionally advanced
 and retains that patch. No history or tag was rewritten.
 
 This document records the approved 1D.0 decisions. Separate validation records
-document the approved 1D.1 dataset freeze and the bounded offline 1D.2 encoder
-implementation. None authorizes or claims a production training service,
-trained theta, AFSE mathematics, a neural model, or continuous inference.
+document the approved 1D.1 dataset freeze, the approved offline 1D.2 encoder,
+and the bounded TRAIN-only 1D.3 candidate-theta run. None authorizes or claims
+held-out validation, an active/promoted model, AFSE mathematics, a neural
+model, or continuous inference.
 
 ## 1. Existing boundary and terminology
 
@@ -272,47 +273,44 @@ factor of four, rename it measured-field Fisher information, or change the loss
 when a study is unsuccessful. The optimizer must reuse `fit_qng` with its
 damping, clipping and Armijo line search.
 
-### 5.2 Proposed wrapper for 1D.3
+### 5.2 Implemented wrapper for 1D.3
 
-The application must not invoke the scientific CLI. A dedicated future
-training adapter must delegate through the public `StateEngine` and supplied
-functions; it must not reach through `TQK8Adapter._engine` or modify either
-adapter's protected dependency. The proposed wrapper calls
+The application does not invoke the scientific CLI. Its dedicated training
+adapter delegates through the public `StateEngine` and supplied functions; it
+does not reach through `TQK8Adapter._engine` or modify either adapter's
+protected dependency. The wrapper calls
 `fit_qng(..., steps=1, verbose=False)` repeatedly on the same frozen full
-training set and current theta, recording only actually accepted updates. It
-may be adopted only after a test shows equivalence to one
-`fit_qng(..., steps=N)` call for fixed inputs, initial theta and optimizer
-parameters. An empty one-step history is a real stop, not a fabricated epoch.
+training set and current theta, recording only actually accepted updates.
+Before the designated run, the full 32-row canonical bank demonstrated exact
+equivalence to one `fit_qng(..., steps=3)` call for theta and complete history.
+An empty one-step history is a real stop, not a fabricated epoch.
 
-The wrapper runs off the HTTP event loop with one admitted job. Proposed states:
-`CREATED`, `RUNNING`, `COMPLETED`, `CANCELLED`, `FAILED`. If a one-step call
-returns no history, the only justified generic reason is
-`NO_ACCEPTED_UPDATE`; the current protected API does not distinguish a small
-gradient from exhausted line search. A more specific label requires separately
-measured evidence. Cancellation is
-cooperative between optimizer steps and never mutates the active model. A
-checkpoint must be explicitly selected and explicitly applied.
+The wrapper runs off the HTTP event loop with one admitted job. Implemented
+states are `CREATED`, `RUNNING`, `COMPLETED`, `CANCELLED`, and `FAILED`. If a
+one-step call returns no history, the justified generic reason is
+`NO_ACCEPTED_UPDATE`; the protected API does not distinguish a small gradient
+from exhausted line search. Cancellation is cooperative between optimizer
+steps. There is no active model, and no theta is applied or promoted in 1D.3.
 
-Preview, diagnostics and future training must share a coordinated heavy-quantum
-admission boundary or use an isolated worker process. Their current independent
-guards are not sufficient once training exists. The simulator and lightweight
-health endpoints must remain responsive.
+Preview, diagnostics and training share one coordinated non-blocking
+heavy-quantum admission boundary. A conflict receives HTTP 429. The simulator
+and lightweight health endpoints remain outside this admission slot.
 
-Proposed starting bounds, pending benchmark and approval:
+Approved and implemented 1D.3 bounds:
 
 | Resource | Default | Hard maximum |
 | --- | ---: | ---: |
-| Frozen training windows | 32 | 128 |
-| Accepted-update attempts | 10 | 50 |
+| Frozen training windows | 32 | 32 |
+| Accepted-update attempts | 10 | 10 |
 | Concurrent training jobs | 1 | 1 |
 
-Validation and test banks are independently bounded and frozen. The 128-row
-engineering cap is not a claim of statistical sufficiency.
+The earlier 128-row engineering proposal is not exposed. Validation and TEST
+are not optimization inputs in 1D.3.
 
-Log state preparations, gradient/metric evaluations, kernel and backtracking
-evaluations, accepted delta, wall time and measured peak memory. Exact-state
-preparations are not physical shots. Timeout values remain unresolved until the
-1D.0 budget probe and later representative benchmark are reviewed.
+The immutable run logs theta/loss history, gradient and step norms, metric
+minimum eigenvalue, per-step/total wall time, peak RSS and transparent engine
+counters. Exact-state evaluations are not physical shots. No wall-clock timeout
+is imposed; work is bounded by ten updates and cooperative cancellation.
 
 ## 6. Checkpoint and compatibility proposal
 
@@ -409,13 +407,13 @@ backend/app/training/
   datasets.py            # observation artifact assembly and grouped split
   labels.py              # separate intervention-to-label policy
   encoding.py            # implemented offline 1D.2 adapter; legacy unchanged
-  runner.py              # bounded wrapper around supplied fit_qng
-  checkpoints.py         # safe persistence, hashes and compatibility
+  runner.py              # implemented bounded wrapper around supplied fit_qng
+  run_storage.py         # immutable candidate-run persistence and load-back
   evaluation.py          # frozen comparisons and test-seal ledger
-  service.py             # one-job orchestration outside event loop
+  service.py             # implemented one-job orchestration outside event loop
 
 backend/app/api/training.py
-  # endpoints only after their increment is explicitly approved
+  # implemented explicit start/status/cancel API; no caller hyperparameters
 
 backend/tests/training/
 frontend/src/worksheets/QngWorksheet.tsx
@@ -430,8 +428,8 @@ semantics require a separate scientific decision.
 
 ## 10. Scientific decision status
 
-Items 1--7 below were approved through 1D.2. Items 8--12 remain future
-decisions and are not authorized by the encoding freeze:
+Items 1--9 below were approved through 1D.3. Items 10--12 remain future
+decisions and are not authorized by the bounded training increment:
 
 1. the nominal/elevated device-noise task and the meaning of `-1/+1`;
 2. selected measured channel, episode duration, harmonic domain and training-only
@@ -470,3 +468,5 @@ Related project records:
 
 - [AQSE development roadmap](../roadmap/aqse-development-roadmap.md)
 - [Milestone 1D.0 design and compatibility audit](../validation/milestone-1d-design-audit.md)
+- [Milestone 1D.3 bounded QNG training](milestone-1d-3-qng-training.md)
+- [Milestone 1D.3 validation record](../validation/milestone-1d-3-qng-training.md)
