@@ -12,7 +12,7 @@ Repository state verified at the start of Milestone 1D:
 
 - repository: `florianocaprio/AQSE`;
 - current milestone branch: `codex/milestone-1d-tqk-training`;
-- branch HEAD at the 1D.1 entry gate: `a0321b13ef09521bb655fdcbc00c05a93f94ee33`;
+- branch HEAD at the 1D.2 entry gate: `45d3a318c9818a43e6011883617c656f9a5ea4d9`;
 - underlying `main` baseline: `1cb07cdccabf9c655a63f2b23aab37383ae90b69`;
 - `main` and `origin/main` also resolve to `1cb07cdccabf9c655a63f2b23aab37383ae90b69`;
 - the `milestone-1c` tag remains at the peeled commit
@@ -29,7 +29,7 @@ Repository state verified at the start of Milestone 1D:
 | **1A** | Author-supplied TQK8 scientific engine | Original 8-qubit VQC, fidelity kernel, alignment loss, numerical derivatives, Fubini--Study metric, and QNG implementation are present with their original tests | **Complete baseline** |
 | **1B** | Initial magnetometer simulator | Scalar finite simulation and the legacy eight-feature harmonic profile are available | **Complete baseline** |
 | **1C** | Vector/network workbench | Causal 1--8-node simulator, observation/truth separation, feature windows, quality/provenance controls, and bounded fixed-theta kernel preview are implemented | **Complete, merged, and tagged** at `95c5483` |
-| **1D** | Controlled datasets and TQK training validation | Reproducible labelled experiments, compatible encoding, bounded training, held-out comparison, checkpoints, and controlled workbench integration | **Current milestone; 1D.1 is the only active authorized increment** |
+| **1D** | Controlled datasets and TQK training validation | Reproducible labelled experiments, compatible encoding, bounded training, held-out comparison, checkpoints, and controlled workbench integration | **Current milestone; 1D.2 implemented and awaiting external review** |
 | **1E** | Local Functional Embedding / AFSE | A mathematically approved, fixed-size, versioned local representation | **Future and unapproved** |
 | **1F** | Classical model | A frozen classical model consuming the approved AFSE representation | **Future and unapproved** |
 | **1G** | Continuous inference and network analysis | Causal predictions, latency/queue accounting, network-level evaluation, and controlled model promotion | **Future and unapproved** |
@@ -46,16 +46,17 @@ authorize the next one.
 | Increment | Intended content | Exit condition | Current authority |
 | --- | --- | --- | --- |
 | **1D.0** | Scientific contract, compatibility audit, baseline validation, and isolated non-production diagnostic probes | Evidence and open decisions are reviewed; Floriano gives an explicit scientific decision on the proposed task, phase treatment, data independence, budgets, and boundaries | **Completed decision gate** |
-| **1D.1** | Immutable experiment datasets, independent label channel, durable lineage, exclusions, and grouped train/validation/test splits | Deterministic regeneration, replay deduplication, raw-interval isolation, and group isolation are demonstrated | **Corrective archive-v2 consolidation validated; awaiting external review** |
-| **1D.2** | Approved input encoding and phase policy, fitted-preprocessing boundary, compatibility rules, and baseline preparation | Periodicity, seam continuity, train-only fitting, and incompatible-artifact rejection are demonstrated | **Planned; not authorized** |
+| **1D.1** | Immutable experiment datasets, independent label channel, durable lineage, exclusions, and grouped train/validation/test splits | Deterministic regeneration, replay deduplication, raw-interval isolation, and group isolation are demonstrated | **Approved and canonically frozen as archive v2** |
+| **1D.2** | Approved input encoding and phase policy, fitted-preprocessing boundary, compatibility rules, and baseline preparation | Periodicity, seam continuity, train-only fitting, and incompatible-artifact rejection are demonstrated | **Implemented; awaiting external scientific review** |
 | **1D.3** | Bounded training jobs using the unchanged author-supplied QNG implementation | Wrapper equivalence, real accepted-step history, cancellation, bounded concurrency, and resource limits are validated | **Planned; not authorized** |
 | **1D.4** | Held-out evaluation and matched classical/quantum comparisons | Model selection is frozen before test opening; negative and inconclusive results are preserved | **Planned; not authorized** |
 | **1D.5** | Workbench controls, checkpoint persistence, and explicit application of compatible trained theta | No automatic training or promotion; stale results and downstream invalidation are enforced | **Planned; not authorized** |
 | **1D.6** | Consolidation, regression, local acceptance, and external review | Full validation passes and a separately authorized review/merge decision is made | **Planned; not authorized** |
 
-During 1D.1 no production training endpoint, production encoder, trained sensor
+Through 1D.2 no production training endpoint, trained theta, trained sensor
 result, AFSE mathematics, classical/neural model, or automatic checkpoint
-application may be activated.
+application has been activated. The phase-direct encoder is an offline,
+versioned artifact and is not connected to the Milestone 1C preview.
 
 ## Training and inference are separate paths
 
@@ -170,13 +171,13 @@ silently combined. In particular:
 
 ### Phase-policy boundary
 
-The legacy preview retains the unchanged `AngleScaler` behavior. The proposed
-1D policy -- retain the original scaler outputs for seven columns and replace
+The legacy preview retains the unchanged `AngleScaler` behavior. The approved
+offline 1D.2 policy retains the original scaler outputs for seven columns and replaces
 the encoded phase column with a canonically wrapped observed phase in
-`[-pi, pi)` -- is an isolated 1D.0 research candidate only. It requires a new
-encoding-policy identifier and evidence of physical-state/kernel periodicity
-and seam continuity with the real circuit before it can be approved. It must
-not overwrite legacy semantics or add a ninth quantum input.
+`[-pi, pi)`. It is versioned as `aqse.tqk8.encoding.phase-direct.v1`; actual
+NumPy/Qiskit state and kernel tests demonstrate periodicity, seam continuity
+and cross-engine agreement at absolute tolerance `1e-12`. It does not overwrite
+legacy semantics or add a ninth quantum input.
 
 ## Stage gates
 
@@ -211,8 +212,8 @@ baseline. Negative or inconclusive results are valid scientific outcomes.
 6. Keep secrets, `.env` files, generated datasets/checkpoints, runtime files,
    caches, logs, ZIP archives, temporary probes, and build artifacts out of
    Git.
-7. Completion of 1D.0 ends at the scientific approval gate. Work must stop
-   before 1D.1 until Floriano explicitly authorizes the next increment.
+7. Completion of each authorized increment ends at its review gate. Work must
+   stop before the next increment until Floriano explicitly authorizes it.
 
 The final milestone workflow remains: push the reviewed branch, external code
 and scientific review, local build, manual acceptance, and only then a
@@ -222,6 +223,8 @@ promotion.
 ## Related contracts
 
 - [Milestone 1D scientific training plan](../training/milestone-1d-scientific-plan.md)
+- [Milestone 1D.2 phase-direct encoding](../training/milestone-1d-2-encoding.md)
+- [Milestone 1D.2 validation record](../validation/milestone-1d-2-encoding.md)
 - [Milestone 1D.0 design and compatibility audit](../validation/milestone-1d-design-audit.md)
 - [Canonical AQSE pipeline](../architecture/canonical-aqse-pipeline.md)
 - [Scientific scope and limitations](../architecture/scientific-scope-and-limitations.md)

@@ -4,12 +4,12 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **1D.0 approved; 1D.1 dataset increment implemented and awaiting review** |
+| Status | **1D.1 approved and frozen; 1D.2 encoding increment implemented and awaiting review** |
 | Date | 2026-09-09 |
 | Working branch | `codex/milestone-1d-tqk-training` |
 | Working baseline | `1cb07cdccabf9c655a63f2b23aab37383ae90b69` |
 | Milestone 1C tag | `milestone-1c` → `95c5483c0192ba7605713c428e02b2527ab1f919` |
-| Production training behavior changed through 1D.1 | No |
+| Production training behavior changed through 1D.2 | No |
 
 The master prompt named `95c5483` as both the tag and `main` baseline. Before
 this work, the approved infrastructure-health patch had intentionally advanced
@@ -17,10 +17,10 @@ this work, the approved infrastructure-health patch had intentionally advanced
 `95c5483`. This branch therefore starts from the current, clean `origin/main`
 and retains that patch. No history or tag was rewritten.
 
-This document records the approved 1D.0 decisions. The separate 1D.1 validation
-record documents their bounded dataset implementation. Neither document
-authorizes or claims a production training service, a new active encoder,
-AFSE mathematics, a neural model, or continuous inference.
+This document records the approved 1D.0 decisions. Separate validation records
+document the approved 1D.1 dataset freeze and the bounded offline 1D.2 encoder
+implementation. None authorizes or claims a production training service,
+trained theta, AFSE mathematics, a neural model, or continuous inference.
 
 ## 1. Existing boundary and terminology
 
@@ -44,18 +44,18 @@ circuit, kernel, loss, state derivatives, empirical Fubini–Study metric and QN
 step. Later application code may adapt inputs and orchestrate calls, but must
 not reconstruct or silently reinterpret that mathematics.
 
-## 2. Proposed first scientific task
+## 2. Approved first scientific task
 
 ### 2.1 Narrow claim
 
-The proposed first task is binary discrimination between **nominal** and
+The approved first task is binary discrimination between **nominal** and
 **elevated simulated device white-noise conditions** under controlled harmonic
 excitation. It is an integration and calibration experiment for the existing
 feature-to-kernel training path. It is not evidence of general fault diagnosis,
 physical quantum advantage, improved magnetometer sensitivity, or the ability
 to distinguish arbitrary environmental events from instrument failures.
 
-Proposed labels, pending approval:
+The frozen dataset label contract is:
 
 - `-1`: nominal device-noise regime;
 - `+1`: elevated device-noise regime.
@@ -159,9 +159,9 @@ the legacy phase column can map nearby physical phases on opposite sides of the
 `-pi/pi` cut to distant encoded coordinates. The isolated 1D.0 probe records
 the actual behavior; it does not alter it.
 
-### 3.3 Candidate direct-phase policy
+### 3.3 Approved offline direct-phase policy
 
-The following is a proposal for later approval, not an active implementation:
+Milestone 1D.2 implements the following offline policy:
 
 1. preserve the raw eight-feature profile and order;
 2. fit the unchanged AngleScaler on the training partition only;
@@ -173,22 +173,22 @@ The following is a proposal for later approval, not an active implementation:
 7. store the scaler's phase mean/scale for provenance but mark them unused by
    this encoding policy.
 
-Proposed identifier: `aqse.tqk8.encoding.phase-direct.v1`.
+Identifier: `aqse.tqk8.encoding.phase-direct.v1`.
 
 The legacy policy and this candidate are incompatible encoder versions. A
 checkpoint from one must be rejected by the other. Wrapping resolves circular
 coordinates only; it does not synchronize different window clocks or provide a
 global phase reference.
 
-Activation requires the real-circuit periodicity and seam-continuity tests,
-Qiskit/NumPy agreement, explicit approval, and a separate later implementation
-increment.
+The offline artifact passed actual protected-circuit periodicity and seam tests
+and NumPy/Qiskit kernel agreement at absolute tolerance `1e-12`. It is not
+automatically active in the Milestone 1C preview and carries no trained theta.
 
 ## 4. Dataset, label and split artifacts
 
 ### 4.1 Three separate immutable artifacts
 
-Later 1D.1 should create three logically and physically separate artifacts:
+Milestone 1D.1 created three logically and physically separate channels:
 
 1. **Observation/feature artifact** — immutable measured samples, observable
    metadata, window boundaries, feature records and quality; no simulator
@@ -398,7 +398,7 @@ Numerical tolerances must be fixed before held-out evaluation. Tests validate
 contracts and predictable mathematics; they must not require every dataset to
 converge or QNG to beat a baseline.
 
-## 9. Proposed implementation map — not yet authorized
+## 9. Increment map and current implementation status
 
 Names below are planning targets and may be refined during review without
 changing existing module boundaries:
@@ -408,7 +408,7 @@ backend/app/training/
   models.py              # immutable DTOs and compatibility tuple
   datasets.py            # observation artifact assembly and grouped split
   labels.py              # separate intervention-to-label policy
-  encoding.py            # approved policy adapter; legacy remains unchanged
+  encoding.py            # implemented offline 1D.2 adapter; legacy unchanged
   runner.py              # bounded wrapper around supplied fit_qng
   checkpoints.py         # safe persistence, hashes and compatibility
   evaluation.py          # frozen comparisons and test-seal ledger
@@ -428,9 +428,10 @@ No candidate continuous-network feature profile is included in this map. Its
 bands, residual estimator, coherence, calibration, missing-context and one-node
 semantics require a separate scientific decision.
 
-## 10. Decisions requiring Floriano's approval
+## 10. Scientific decision status
 
-Before 1D.1 or later work, approve or revise:
+Items 1--7 below were approved through 1D.2. Items 8--12 remain future
+decisions and are not authorized by the encoding freeze:
 
 1. the nominal/elevated device-noise task and the meaning of `-1/+1`;
 2. selected measured channel, episode duration, harmonic domain and training-only
