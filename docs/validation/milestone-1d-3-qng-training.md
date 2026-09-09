@@ -3,9 +3,9 @@
 ## Evidence status
 
 This record separates the approved 1D.3 protocol, the implemented software,
-and measurements from the single designated canonical TRAIN trajectory. It
-does not close Gate G4, select a model, open TEST, use VALIDATION labels, or
-authorize Milestone 1D.4.
+the designated canonical TRAIN execution, and the corrective audit/identity
+evidence. It does not close Gate G4, select a model, open TEST, use VALIDATION
+labels, or authorize Milestone 1D.4.
 
 Entry branch was `codex/milestone-1d-tqk-training`; the approved entry HEAD was
 `ab5bff99fa9779a143e236595c0d4c1e78ff349f`. The working tree was clean and
@@ -108,21 +108,67 @@ cancellation request arrived. It published
 `5ae026e633def66b477537147962e1b9b35658e6edcff25357231c2660614551`.
 
 This second artifact is retained, immutable, and explicitly non-canonical. It
-was not started to improve or choose a loss curve. After removing timing, peak
-RSS and identity fields, its normalized scientific payload is byte-identical
-to the designated run (comparison SHA-256
-`2231f353a44cab6f087adb60638ba0142f6406ee7abf253d049fa27dd5eaafc3`).
-No third run was started. This deviation prevents claiming a clean
-exactly-one-execution audit even though exactly one artifact is designated
-canonical.
+was not started to improve or choose a loss curve. No third candidate-training
+run was started during corrective consolidation.
 
-The lightweight endpoint measurements captured immediately afterward were
-`2.637 ms` for `/api/health`, `3.324 ms` for `/api/quantum/health`, and
-`2.940 ms` for `/api/network/health`; because the first run had already ended,
-they are not represented as live concurrent canonical-run measurements.
-Automated lifecycle tests instead hold a job in `RUNNING`, execute a real
-one-frame sensor session within the one-second bound, keep both lightweight
-health endpoints callable, and verify 429 for diagnostics and a second job.
+## Corrective trajectory identity and execution intent
+
+The two historical `run.json` documents were loaded read-only and independently
+reduced to the versioned deterministic scientific payload. They resolve exactly
+to the same identity:
+
+| Item | Value |
+| --- | --- |
+| Trajectory ID | `aqse-qng-trajectory-08f0020e9dbcd171` |
+| Trajectory content digest | `08f0020e9dbcd171b59447545e8e01464cd7793fecbed250df899b19c46f3d8e` |
+| Audit mapping digest | `2fba36334a8a224169ba97a153536fbe293333114396d285953827e54d6f8ea2` |
+| Designated execution | `aqse-qng-run-f00c702ad790df2b` |
+| Equivalent non-canonical execution | `aqse-qng-run-5ae026e633def66b` |
+| Mapping `mapping.json` SHA-256 | `1b83c804f2b7a3525e4314507b530e829cfe8362219af229ef866cd729a0509c` |
+| Mapping `manifest.json` SHA-256 | `37867a7f766d3c1cdd1742fbdfcfdf8d6cfd5392e90ba291d69e0cd1e7b7c9c2` |
+
+The trajectory payload includes frozen input identity/digests, backend and
+protected-source semantics, initialization, optimizer contract, every accepted
+scientific step and aggregate evaluation counters. It excludes run/content
+identity, job UUIDs, paths, timestamps, timing, RSS and execution provenance.
+Changing theta, scientific input or optimizer contract changes the identity;
+changing excluded execution measurements does not.
+
+The immutable audit mapping was written outside Git without touching either
+historical execution. Their six recorded file hashes remained byte-identical.
+The canonical historical execution is also bound retrospectively to durable
+intent `aqse-1d3-canonical-training-v1`; replaying that intent returned HTTP 200
+with the original job/run and did not create a worker. Its immutable claim and
+terminal-result digests are respectively
+`57da9c95b7959a1d7e043f7c6b12bc813a234200a180c3e63184e9a5b8549acd`
+and `92c552fd40c4ba0fa0d1ab466c317dea0fb711c042ef4746378a182c4bbc62cf`.
+The API accepts no scientific overrides in an execution intent.
+
+## Real-load responsiveness benchmark
+
+One predeclared engineering benchmark was run once with the real 32-row TRAIN
+bank and exact NumPy QNG implementation. It held the same heavy-quantum slot as
+candidate training but used the separate `engineering_benchmark` purpose and
+published no candidate artifact. Training-run directories were identical
+before and after the benchmark.
+
+| Measurement under active real QNG load | Result |
+| --- | ---: |
+| Intent | `aqse-1d3-g4-real-load-benchmark` |
+| Accepted updates | 10 |
+| Compute wall time | `2366.940 ms` |
+| End-to-end wall time | `2371.525 ms` |
+| Peak process RSS | `99,123,200` bytes |
+| Differential / Gram / statevector calls | `10 / 11 / 10,912` |
+| `/api/health` | HTTP 200, `1.732 ms` |
+| `/api/quantum/health` | HTTP 200, `4.702 ms` |
+| `/api/network/health` | HTTP 200, `5.237 ms` |
+| Real one-frame simulator step | HTTP 200, `5.148 ms` |
+| Quantum diagnostics contention | HTTP 429, `4.060 ms` |
+| Quantum preview contention | HTTP 429, `4.001 ms` |
+
+This is an engineering responsiveness measurement, not a second canonical
+trajectory, checkpoint candidate, loss comparison or model-selection result.
 
 ## TEST seal and protected assets
 
@@ -141,21 +187,18 @@ No held-out values, labels, statistics, kernels or metrics were read.
 
 ## Validation status
 
-Final validation measured:
+Final corrective validation measured:
 
-- complete backend: **232/232 passed**;
+- complete backend: **238/238 passed**;
 - original protected TQK8 regression: **8/8 passed**;
-- complete training suite: **82/82 passed**;
-- dedicated 1D.3 training/service suite: **15/15 passed**;
+- complete training suite: **88/88 passed**;
+- dedicated 1D.3 training/service/corrective suite: **21/21 passed**;
+- corrective identity, intent and benchmark regression: **6/6 passed**;
 - frontend: **32/32 passed** across 10 test files;
 - Ruff, TypeScript typecheck, ESLint and Vite production build: passed;
 - `git diff --check`: passed;
 - rebuilt Docker backend/frontend: healthy;
-- lightweight backend health: HTTP 200 in `1.891 ms`;
-- lightweight quantum readiness: HTTP 200 in `2.441 ms`;
-- network health: HTTP 200 in `2.800 ms`;
-- frontend: HTTP 200 in `4.267 ms`;
-- standalone real one-frame simulator step: `0.920 ms`.
+- the real-load measurements are reported above.
 
 The upstream Starlette `BlockingPortal` deprecation and existing Vite
 chunk-size advisory are known non-blocking warnings.

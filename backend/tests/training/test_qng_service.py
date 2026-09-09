@@ -10,6 +10,7 @@ import app.api.quantum_preview as quantum_preview_api
 import app.api.training as training_api
 from app.main import app
 from app.quantum.admission import heavy_quantum_slot
+from app.training.execution_intent import TrainingExecutionIntent
 from app.training.run_models import TrainingJobState
 from app.training.service import TrainingJobBusyError, TrainingJobService
 from app.training.workflow import TrainingJobOutcome
@@ -29,6 +30,10 @@ def _wait_terminal(service: TrainingJobService, job_id: str):
     raise TimeoutError("training job did not reach a terminal state")
 
 
+def _intent(suffix: str = "primary") -> TrainingExecutionIntent:
+    return TrainingExecutionIntent(intent_id=f"qng-service-test-{suffix}")
+
+
 def test_one_active_job_busy_admission_and_cooperative_cancel() -> None:
     started = Event()
     release = Event()
@@ -43,10 +48,10 @@ def test_one_active_job_busy_admission_and_cooperative_cancel() -> None:
         )
 
     service = TrainingJobService(blocked_runner)
-    job = service.start()
+    job = service.start(_intent()).job
     assert started.wait(timeout=1.0)
     with pytest.raises(TrainingJobBusyError, match="already active"):
-        service.start()
+        service.start(_intent("second"))
     assert not heavy_quantum_slot.acquire(blocking=False)
     service.cancel(job.job_id)
     release.set()
@@ -71,11 +76,11 @@ def test_completed_cancel_is_harmless_and_registry_is_bounded() -> None:
         )
 
     service = TrainingJobService(completed_runner, maximum_records=1)
-    first = service.start()
+    first = service.start(_intent("first")).job
     first_terminal = _wait_terminal(service, first.job_id)
     after_cancel = service.cancel(first.job_id)
     assert after_cancel == first_terminal
-    second = service.start()
+    second = service.start(_intent("second")).job
     _wait_terminal(service, second.job_id)
     assert service.get(first.job_id) is None
 
@@ -85,7 +90,7 @@ def test_failure_is_preserved_without_fabricated_completion() -> None:
         raise RuntimeError("controlled failure")
 
     service = TrainingJobService(failed_runner)
-    job = service.start()
+    job = service.start(_intent()).job
     terminal = _wait_terminal(service, job.job_id)
 
     assert terminal.state is TrainingJobState.FAILED
@@ -112,10 +117,20 @@ def test_training_api_is_explicit_and_lightweight_health_remains_available(
     service = TrainingJobService(blocked_runner)
     monkeypatch.setattr(training_api, "training_jobs", service)
     client = TestClient(app)
-    response = client.post("/api/training/jobs")
+    primary_intent = _intent("api")
+    response = client.post(
+        "/api/training/jobs",
+        json=primary_intent.model_dump(mode="json"),
+    )
     assert response.status_code == 201
     job_id = response.json()["job_id"]
     assert started.wait(timeout=1.0)
+    repeated = client.post(
+        "/api/training/jobs",
+        json=primary_intent.model_dump(mode="json"),
+    )
+    assert repeated.status_code == 200
+    assert repeated.json()["job_id"] == job_id
 
     assert client.get("/api/health").status_code == 200
     assert client.get("/api/quantum/health").status_code == 200
@@ -133,7 +148,13 @@ def test_training_api_is_explicit_and_lightweight_health_remains_available(
     assert simulator_latency_s < 1.0
     assert client.post("/api/quantum/diagnostics").status_code == 429
     assert quantum_preview_api.preview_slot is heavy_quantum_slot
-    assert client.post("/api/training/jobs").status_code == 429
+    assert (
+        client.post(
+            "/api/training/jobs",
+            json=_intent("api-second").model_dump(mode="json"),
+        ).status_code
+        == 429
+    )
     assert client.get("/api/training/jobs/unknown").status_code == 404
     cancel = client.post(f"/api/training/jobs/{job_id}/cancel")
     assert cancel.status_code == 200

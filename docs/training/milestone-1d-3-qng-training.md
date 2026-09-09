@@ -9,10 +9,11 @@ immutable candidate-theta trajectory outside Git; it is not a promoted model,
 an active workbench checkpoint, held-out evaluation, or evidence of quantum
 advantage.
 
-The increment is implemented on `codex/milestone-1d-tqk-training` and awaits
-external scientific review. Gate G4 is not declared closed by this document.
-Milestone 1D.4, validation-based model selection, TEST opening, AFSE, neural
-processing, physical-QPU work and GUI integration remain blocked.
+The increment and its corrective audit/identity consolidation are implemented
+on `codex/milestone-1d-tqk-training` and await final external G4 review. Gate
+G4 is not declared closed by this document. Milestone 1D.4, validation-based
+model selection, TEST opening, AFSE, neural processing, physical-QPU work and
+GUI integration remain blocked.
 
 ## Frozen scientific inputs
 
@@ -92,10 +93,16 @@ These are exact-simulator consistency checks, not physical-QPU measurements.
 ## Runtime and artifact contracts
 
 `POST /api/training/jobs` admits the one frozen job contract without accepting
-browser-supplied arrays or hyperparameters. Status and cooperative cancellation
-are explicit job-ID operations. The bounded process-local registry retains at
-most 16 records and exposes `CREATED`, `RUNNING`, `COMPLETED`, `CANCELLED` and
-`FAILED`. No active model or automatic theta application exists.
+browser-supplied arrays or hyperparameters. Its versioned request contains only
+an explicit caller-owned `intent_id` and the fixed `candidate_training`
+purpose. The intent is claimed durably before worker creation. Repeating the
+same intent while the job is running, after completion, or after process-local
+registry eviction/restart resolves to the original job and never creates a
+second worker. A deliberate new execution therefore requires a distinct intent.
+Status and cooperative cancellation remain explicit job-ID operations. The
+bounded process-local registry retains at most 16 records and exposes `CREATED`,
+`RUNNING`, `COMPLETED`, `CANCELLED` and `FAILED`. No active model or automatic
+theta application exists.
 
 Training, quantum preview and explicit diagnostics share one non-blocking
 heavy-quantum admission slot. Conflicting heavy work receives HTTP 429.
@@ -108,6 +115,35 @@ Publication stages and validates `run.json`, `execution.json` and a digest
 manifest, makes the payload read-only, then atomically renames it. Existing
 identities cannot be overwritten. Loading rejects unexpected files, symlinks,
 size/digest changes, source or compatibility mismatches.
+
+## Deterministic trajectory identity and audit mapping
+
+The versioned `aqse.qng-trajectory.v1` identity hashes only deterministic
+scientific content: all frozen input identities and digests, backend semantics,
+the protected TQK8 source hash, initialization policy/seed/theta0, optimizer
+contract, accepted-step theta/loss/gradient/step/metric/counters, stop reason,
+final theta/loss and aggregate counters. Run IDs, job UUIDs, paths, timestamps,
+wall-clock timings, RSS measurements and execution metadata are deliberately
+excluded.
+
+Both immutable historical executions therefore resolve to the same trajectory:
+`aqse-qng-trajectory-08f0020e9dbcd171`, with full content digest
+`08f0020e9dbcd171b59447545e8e01464cd7793fecbed250df899b19c46f3d8e`.
+An immutable audit mapping below the configured artifact root designates
+`aqse-qng-run-f00c702ad790df2b` and records
+`aqse-qng-run-5ae026e633def66b` as an equivalent non-canonical execution. The
+historical artifacts are neither rewritten nor deleted.
+
+## Engineering responsiveness benchmark
+
+The predeclared `aqse-1d3-g4-real-load-benchmark` intent has the separate
+`engineering_benchmark` purpose. It executes the real exact-NumPy, 32-sample
+TRAIN QNG workload in memory under the shared heavy-quantum admission slot and
+cannot publish a candidate artifact. The API does not accept alternate
+scientific inputs or hyperparameters. Concurrent health/readiness requests and
+one real simulator step remain available; preview and quantum diagnostics are
+rejected with HTTP 429 while the benchmark owns the slot. Its measured evidence
+is recorded in the validation record and is not a scientific training result.
 
 ## Scientific boundary
 
