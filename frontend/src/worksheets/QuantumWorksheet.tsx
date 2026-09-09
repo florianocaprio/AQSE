@@ -1,8 +1,15 @@
 import { CapabilityBadge } from "../components/CapabilityBadge";
+import {
+  activeBundleForTask,
+  bundleForResult,
+  compactId,
+  latestResultForSensor,
+} from "../components/DemoReadouts";
 import { KernelHeatmap } from "../components/KernelHeatmap";
 import { QuantumCircuitControls } from "../components/QuantumCircuitControls";
 import { WorksheetHeader } from "../components/WorksheetHeader";
 import { VqcCircuitDiagram } from "../diagrams/VqcCircuitDiagram";
+import { useDemo } from "../state/demo";
 import {
   featureResultIsStale,
   quantumResultIsStale,
@@ -13,6 +20,7 @@ import type { QuantumBackend } from "../types/quantum";
 
 export function QuantumWorksheet() {
   const { state, dispatch } = useWorkbench();
+  const { state: demoState } = useDemo();
   const { previewQuantum } = useWorkbenchActions();
   const validWindows = state.features.result?.windows.filter(
     ({ quality }) => quality.valid_for_quantum,
@@ -23,6 +31,18 @@ export function QuantumWorksheet() {
     !featureResultIsStale(state) &&
     state.quantum_health.status === "ready";
   const preview = state.quantum.preview;
+  const liveResult = latestResultForSensor(
+    demoState.analysis,
+    state.network.selected_node_id,
+    state.network.session?.session_id ?? null,
+  );
+  const activeTaskId = liveResult?.task_id ?? (
+    (state.network.executed?.value.nodes.length ?? 0) >= 3
+      ? "aqse.network-pattern.v1"
+      : "aqse.local-change.v1"
+  );
+  const activeBundle = bundleForResult(demoState.registry, liveResult)
+    ?? activeBundleForTask(demoState.registry, activeTaskId);
 
   return (
     <section className="worksheet" aria-labelledby="quantum-title">
@@ -31,20 +51,50 @@ export function QuantumWorksheet() {
         index="04"
         eyebrow="EXPLICIT FIXED-THETA EXECUTION"
         title="Quantum Engine"
-        description="Inspect the author-provided eight-qubit circuit and run a bounded TQK kernel preview. This worksheet never trains θ and never invokes QNG."
+        description="Inspect the author-provided eight-qubit circuit, the frozen live inference bundle, and an isolated manual kernel preview. Inference never runs QNG."
         actions={<CapabilityBadge status={state.capabilities?.quantum_preview.status ?? "available_not_connected"} />}
       />
 
       <div className="quantum-safety-banner" role="note">
         <strong>Scientific boundary</strong>
-        <span>Feature windows and their signed provenance tokens are forwarded intact. AngleScaler is fitted by the backend on the selected reference set. No browser-side feature reconstruction occurs.</span>
+        <span>The connected path uses exact local state simulation, not a physical QPU. Frozen bundle θ and the editable manual-preview θ draft are separate identities; the browser never substitutes one for the other.</span>
       </div>
+
+      <article className="workbench-panel demo-bundle-panel">
+        <div className="panel-heading-row">
+          <div><p className="panel-kicker">LIVE QUANTUM REPRESENTATION</p><h2>{activeBundle?.bundle_id ?? "No compatible bundle applied"}</h2></div>
+          {activeBundle && <span className="result-badge">FROZEN θ</span>}
+        </div>
+        <dl className="quality-grid">
+          <div><dt>Task</dt><dd>{activeBundle?.task_id ?? "—"}</dd></div>
+          <div><dt>State8 profile</dt><dd>{activeBundle?.profile_id ?? "—"}</dd></div>
+          <div><dt>θ candidate</dt><dd>{activeBundle?.theta_candidate_name ?? "—"}</dd></div>
+          <div><dt>θ identity</dt><dd title={activeBundle?.theta_id}>{compactId(activeBundle?.theta_id)}</dd></div>
+          <div><dt>Accepted QNG updates</dt><dd>{activeBundle?.accepted_qng_updates ?? "—"}</dd></div>
+          <div><dt>TQK reference rows</dt><dd>{activeBundle?.afse_reference_size ?? "—"}</dd></div>
+          <div><dt>Encoded live window</dt><dd>{liveResult?.encoded_angles ? `${liveResult.encoded_angles.length} angles` : "—"}</dd></div>
+          <div><dt>Backend mode</dt><dd>exact local statevector</dd></div>
+        </dl>
+        <p className="boundary-note">
+          TQK fidelity comparisons feed the frozen AFSE reference map. They do not represent one qubit per sensor and do not expose physical hardware execution.
+        </p>
+      </article>
 
       <VqcCircuitDiagram circuit={state.quantum.circuit} />
 
-      <div className="worksheet-grid quantum-layout-grid">
+      <article className="workbench-panel compact-panel demo-circuit-metadata">
+        <div className="panel-heading-row"><div><p className="panel-kicker">PROTECTED CIRCUIT METADATA</p><h2>{state.quantum.circuit?.name ?? "Awaiting circuit metadata"}</h2></div></div>
+        <dl className="quality-grid">
+          <div><dt>Qubits</dt><dd>{state.quantum.circuit?.qubits ?? "—"}</dd></div>
+          <div><dt>Input features</dt><dd>{state.quantum.circuit?.input_features ?? "—"}</dd></div>
+          <div><dt>Trainable parameters</dt><dd>{state.quantum.circuit?.trainable_parameters ?? "—"}</dd></div>
+          <div><dt>Ordered operations</dt><dd>{state.quantum.circuit?.operations.length ?? "—"}</dd></div>
+        </dl>
+      </article>
+
+      <div className="worksheet-grid quantum-layout-grid demo-preview-boundary">
         <aside className="workbench-panel configuration-panel">
-          <div className="panel-heading-row"><div><p className="panel-kicker">PREVIEW REQUEST</p><h2>Execution controls</h2></div><span className="result-badge">MANUAL ONLY</span></div>
+          <div className="panel-heading-row"><div><p className="panel-kicker">LEGACY / MANUAL PREVIEW</p><h2>Isolated execution controls</h2></div><span className="result-badge stale">NOT THE LIVE BUNDLE</span></div>
           <label className="input-control full"><span className="input-label">Backend</span>
             <select value={state.quantum.backend} onChange={(event) => dispatch({ type: "QUANTUM_BACKEND", backend: event.target.value as QuantumBackend })}>
               <option value="qiskit">Qiskit exact statevector</option>
@@ -85,7 +135,8 @@ export function QuantumWorksheet() {
         </article>
       </div>
 
-      <section aria-label="Quantum theta configuration">
+      <section aria-label="Manual preview theta configuration" className="demo-preview-boundary">
+        <p className="boundary-note">These 16 controls belong only to the manual preview draft. They cannot mutate the frozen θ used by continuous inference.</p>
         <QuantumCircuitControls
           values={state.quantum.theta_draft.value}
           onChange={(index, value) => dispatch({ type: "THETA_VALUE", index, value })}

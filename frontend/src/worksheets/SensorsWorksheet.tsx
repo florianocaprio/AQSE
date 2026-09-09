@@ -1,5 +1,7 @@
-import { useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 
+import { errorMessage } from "../api/client";
+import { scheduleNetworkEvent } from "../api/network";
 import { NetworkSignalChart } from "../components/NetworkSignalChart";
 import { NetworkComparisonChart } from "../components/NetworkComparisonChart";
 import { NetworkDifferenceChart } from "../components/NetworkDifferenceChart";
@@ -19,7 +21,9 @@ import type {
   NetworkEventConfiguration,
   NetworkSessionConfiguration,
   NodeErrorConfiguration,
+  ScheduledEventResponse,
   SensorNodeConfiguration,
+  SessionStatus,
   TemperatureDriverConfiguration,
 } from "../types/network";
 import type { Matrix3 } from "../types/network";
@@ -33,6 +37,72 @@ const EVENT_KINDS: EventKind[] = [
   "shared_instrument_offset",
   "dropout",
   "stuck",
+];
+
+export type LiveEventIntent =
+  | "environment_common"
+  | "node_bias"
+  | "node_drift"
+  | "node_noise"
+  | "shared_instrument"
+  | "dropout"
+  | "clipping"
+  | "stuck";
+
+const LIVE_EVENT_OPTIONS: ReadonlyArray<{
+  intent: LiveEventIntent;
+  label: string;
+  description: string;
+  defaultMagnitude: number;
+}> = [
+  {
+    intent: "environment_common",
+    label: "Common environmental field step",
+    description: "World-frame field perturbation applied to the environment, not to an individual device.",
+    defaultMagnitude: 100,
+  },
+  {
+    intent: "node_bias",
+    label: "Single-node bias deviation",
+    description: "Device-local X-axis offset for the selected sensor.",
+    defaultMagnitude: 100,
+  },
+  {
+    intent: "node_drift",
+    label: "Single-node drift",
+    description: "Device-local X-axis drift for the selected sensor.",
+    defaultMagnitude: 5,
+  },
+  {
+    intent: "node_noise",
+    label: "Single-node noise burst",
+    description: "Temporary multiplication of the selected sensor's configured white noise.",
+    defaultMagnitude: 8,
+  },
+  {
+    intent: "shared_instrument",
+    label: "Shared instrument offset",
+    description: "Identical device-local X-axis offset applied to every node; requires at least two sensors.",
+    defaultMagnitude: 75,
+  },
+  {
+    intent: "dropout",
+    label: "Sensor dropout",
+    description: "Explicit temporary loss of signal for the selected sensor.",
+    defaultMagnitude: 0,
+  },
+  {
+    intent: "clipping",
+    label: "Clipping stress",
+    description: "Bias stress derived from the selected node's lowest saturation limit; verify clipping in observed quality flags.",
+    defaultMagnitude: 0,
+  },
+  {
+    intent: "stuck",
+    label: "Stuck reading",
+    description: "Explicit temporary held reading for the selected sensor.",
+    defaultMagnitude: 0,
+  },
 ];
 
 const DEFAULT_TEMPERATURE_DRIVER: TemperatureDriverConfiguration = {
@@ -168,7 +238,7 @@ export function SensorsWorksheet() {
               <GlobalConfiguration configuration={draft} onChange={patchDraft} />
               {state.network.blind_mode
                 ? <p className="blind-configuration-boundary">Environment, device-error, scheduled-event, and injected-cause controls are hidden while blind mode is active. Disable blind mode to edit them.</p>
-                : <><EnvironmentControls configuration={draft} onChange={patchDraft} /><EventControls configuration={draft} selectedNodeId={selectedNode?.sensor_id ?? null} onChange={patchDraft} /></>}
+                : <><EnvironmentControls configuration={draft} onChange={patchDraft} /><EventControls configuration={draft} selectedNodeId={selectedNode?.sensor_id ?? null} onChange={patchDraft} /><LiveEventControls session={state.network.session} configuration={state.network.executed?.value ?? null} selectedNodeId={state.network.selected_node_id} /></>}
             </>
           ) : <p className="empty-copy">Waiting for backend configuration defaults.</p>}
         </aside>
@@ -453,6 +523,402 @@ function EventControls({ configuration, selectedNodeId, onChange }: ConfigProps 
       <button type="button" className="button button-secondary" onClick={addEvent} disabled={configuration.events.length >= 128}>Add event</button>
     </fieldset>
   );
+}
+
+type LiveEventStatus = "requesting" | "scheduled" | "rejected" | "stale";
+
+type LiveEventLogEntry = {
+  requestId: string;
+  eventId: string;
+  sessionId: string;
+  requestedAt: string;
+  status: LiveEventStatus;
+  summary: string;
+  detail: string;
+};
+
+type LiveEventScheduler = (
+  sessionId: string,
+  event: NetworkEventConfiguration,
+  signal?: AbortSignal,
+) => Promise<ScheduledEventResponse>;
+
+export type LiveEventRequestOutcome =
+  | { status: "scheduled"; response: ScheduledEventResponse; detail: string }
+  | { status: "rejected"; detail: string }
+  | { status: "stale"; response?: ScheduledEventResponse; detail: string };
+
+type LiveEventControlsProps = {
+  session: SessionStatus | null;
+  configuration: NetworkSessionConfiguration | null;
+  selectedNodeId: string | null;
+};
+
+export function LiveEventControls({
+  session,
+  configuration,
+  selectedNodeId,
+}: LiveEventControlsProps) {
+  const sessionId = session?.session_id ?? null;
+  const sessionIdRef = useRef(sessionId);
+  const activeRequestRef = useRef<{
+    requestId: string;
+    sessionId: string;
+    controller: AbortController;
+  } | null>(null);
+  const [intent, setIntent] = useState<LiveEventIntent>("environment_common");
+  const [targetNodeId, setTargetNodeId] = useState(selectedNodeId ?? "");
+  const [leadTimeS, setLeadTimeS] = useState(5);
+  const [durationS, setDurationS] = useState(2);
+  const [magnitude, setMagnitude] = useState(100);
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
+  const [log, setLog] = useState<LiveEventLogEntry[]>([]);
+  sessionIdRef.current = sessionId;
+
+  useEffect(() => {
+    const active = activeRequestRef.current;
+    if (!active || active.sessionId === sessionId) return;
+    active.controller.abort();
+    activeRequestRef.current = null;
+    setPendingRequestId(null);
+    setLog((current) => updateLiveEventLog(current, active.requestId, {
+      status: "stale",
+      detail: "The UI session changed while the request was pending. Backend acceptance was not confirmed.",
+    }));
+  }, [sessionId]);
+
+  useEffect(() => () => {
+    activeRequestRef.current?.controller.abort();
+    activeRequestRef.current = null;
+  }, []);
+
+  const nodes = configuration?.nodes ?? [];
+  const effectiveTargetId = nodes.some(({ sensor_id }) => sensor_id === targetNodeId)
+    ? targetNodeId
+    : nodes.some(({ sensor_id }) => sensor_id === selectedNodeId)
+      ? selectedNodeId ?? ""
+      : nodes[0]?.sensor_id ?? "";
+  const option = LIVE_EVENT_OPTIONS.find((candidate) => candidate.intent === intent)!;
+  const minimumLeadS = configuration ? minimumLiveEventLeadS(configuration) : 0.1;
+  const effectiveLeadS = Math.max(leadTimeS, minimumLeadS);
+  const isSharedUnavailable = intent === "shared_instrument" && nodes.length < 2;
+  const sessionUnavailable = !session || !configuration;
+  const stopped = session?.state === "stopped";
+  const canSchedule = !sessionUnavailable
+    && !stopped
+    && !isSharedUnavailable
+    && !pendingRequestId;
+
+  const schedule = async () => {
+    if (!session || !configuration || !canSchedule || activeRequestRef.current) return;
+    const requestId = `live-request-${crypto.randomUUID()}`;
+    const eventId = `live-${intent}-${crypto.randomUUID()}`;
+    let event: NetworkEventConfiguration;
+    try {
+      event = buildLiveNetworkEvent({
+        eventId,
+        intent,
+        simTimeS: session.sim_time_s,
+        leadTimeS,
+        durationS,
+        magnitude,
+        targetSensorId: effectiveTargetId,
+        configuration,
+      });
+    } catch (error: unknown) {
+      setLog((current) => prependLiveEventLog(current, {
+        requestId,
+        eventId,
+        sessionId: session.session_id,
+        requestedAt: new Date().toISOString(),
+        status: "rejected",
+        summary: option.label,
+        detail: errorMessage(error, "The live event request is invalid."),
+      }));
+      return;
+    }
+
+    const controller = new AbortController();
+    activeRequestRef.current = { requestId, sessionId: session.session_id, controller };
+    setPendingRequestId(requestId);
+    setLog((current) => prependLiveEventLog(current, {
+      requestId,
+      eventId,
+      sessionId: session.session_id,
+      requestedAt: new Date().toISOString(),
+      status: "requesting",
+      summary: option.label,
+      detail: `Requesting activation at simulated t=${event.start_time_s.toFixed(6)} s.`,
+    }));
+
+    const outcome = await submitLiveNetworkEvent({
+      sessionId: session.session_id,
+      event,
+      signal: controller.signal,
+      isCurrent: () => (
+        sessionIdRef.current === session.session_id
+        && activeRequestRef.current?.requestId === requestId
+      ),
+    });
+    if (activeRequestRef.current?.requestId === requestId) {
+      activeRequestRef.current = null;
+      setPendingRequestId(null);
+    }
+    setLog((current) => updateLiveEventLog(current, requestId, {
+      status: outcome.status,
+      detail: outcome.detail,
+    }));
+  };
+
+  return (
+    <fieldset>
+      <legend>Live event injection</legend>
+      <p className="field-help">
+        Submit an explicit event to the current backend session. A SCHEDULED entry confirms backend acceptance only; observe the data and quality flags to confirm the physical effect.
+      </p>
+      {sessionUnavailable && <p className="inline-message warning-message">Create a session before scheduling a live event. Draft events above are used only when the next session is created.</p>}
+      {stopped && <p className="inline-message warning-message">The current session is stopped. Reset, replay, or create a new session before scheduling another event.</p>}
+      <div className="control-grid">
+        <label className="input-control">
+          <span className="input-label">Event</span>
+          <select
+            value={intent}
+            disabled={sessionUnavailable || Boolean(pendingRequestId)}
+            onChange={(change) => {
+              const next = change.target.value as LiveEventIntent;
+              setIntent(next);
+              setMagnitude(LIVE_EVENT_OPTIONS.find(({ intent: value }) => value === next)!.defaultMagnitude);
+            }}
+          >
+            {LIVE_EVENT_OPTIONS.map((eventOption) => (
+              <option
+                key={eventOption.intent}
+                value={eventOption.intent}
+                disabled={eventOption.intent === "shared_instrument" && nodes.length < 2}
+              >
+                {eventOption.label}
+              </option>
+            ))}
+          </select>
+          <small>{option.description}</small>
+        </label>
+        <label className="input-control">
+          <span className="input-label">Target node</span>
+          <select
+            value={effectiveTargetId}
+            disabled={sessionUnavailable || intent === "environment_common" || intent === "shared_instrument" || Boolean(pendingRequestId)}
+            onChange={(change) => setTargetNodeId(change.target.value)}
+          >
+            {nodes.map((node) => <option key={node.sensor_id} value={node.sensor_id}>{node.sensor_id}</option>)}
+          </select>
+          <small>{intent === "environment_common" ? "Environment-wide; no device target." : intent === "shared_instrument" ? "All nodes in the executed session." : "One node from the executed session."}</small>
+        </label>
+        <NumberInput label="Lead from backend time" unit="s" value={leadTimeS} min={0.001} step={0.1} disabled={sessionUnavailable || Boolean(pendingRequestId)} onChange={setLeadTimeS} />
+        <NumberInput label="Duration" unit="s" value={durationS} min={0.001} step={0.1} disabled={sessionUnavailable || Boolean(pendingRequestId)} onChange={setDurationS} />
+        {liveEventMagnitudeUnit(intent) && (
+          <NumberInput
+            label={intent === "node_noise" ? "Noise multiplier" : "X-axis magnitude"}
+            unit={liveEventMagnitudeUnit(intent) ?? undefined}
+            value={magnitude}
+            min={intent === "node_noise" ? 1.0001 : undefined}
+            step={intent === "node_noise" ? 0.1 : 1}
+            disabled={sessionUnavailable || Boolean(pendingRequestId)}
+            onChange={setMagnitude}
+          />
+        )}
+      </div>
+      {configuration && (
+        <p className="field-help">
+          Backend time: {session?.sim_time_s.toFixed(6) ?? "—"} s · requested lead: {leadTimeS.toFixed(3)} s · enforced lead: {effectiveLeadS.toFixed(3)} s · planned start: {futureLiveEventStart(session?.sim_time_s ?? 0, leadTimeS, configuration).toFixed(6)} s.
+        </p>
+      )}
+      {intent === "clipping" && configuration && effectiveTargetId && (
+        <p className="field-help">The generated node-bias stress is derived from the lowest configured axis limit. Scheduling does not claim that clipping occurred; verify the observed saturation mask and clipped quality flag.</p>
+      )}
+      {isSharedUnavailable && <p className="inline-message warning-message">A shared instrument event requires at least two nodes in the executed session.</p>}
+      <button type="button" className="button button-primary" disabled={!canSchedule} onClick={() => void schedule()}>
+        {pendingRequestId ? "Scheduling…" : "Schedule live event"}
+      </button>
+
+      <div aria-live="polite">
+        <div className="panel-heading-row">
+          <div><p className="panel-kicker">LIVE REQUEST REGISTER</p><h3>Accepted and rejected events</h3></div>
+          {log.length > 0 && <button type="button" className="text-button" onClick={() => setLog([])} disabled={Boolean(pendingRequestId)}>Clear register</button>}
+        </div>
+        {log.length === 0 ? <p className="empty-copy">No live event request has been sent from this worksheet.</p> : log.map((entry) => (
+          <div className="event-row" key={entry.requestId}>
+            <div className="panel-heading-row">
+              <div><strong>{entry.summary}</strong><p className="field-help">{entry.eventId}</p></div>
+              <span className={entry.status === "scheduled" || entry.status === "requesting" ? "result-badge" : "result-badge stale"}>{entry.status.toUpperCase()}</span>
+            </div>
+            <dl className="quality-grid">
+              <div><dt>Session</dt><dd>{entry.sessionId}</dd></div>
+              <div><dt>Requested</dt><dd>{entry.requestedAt}</dd></div>
+              <div className="span-two"><dt>Backend outcome</dt><dd>{entry.detail}</dd></div>
+            </dl>
+          </div>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+export function buildLiveNetworkEvent({
+  eventId,
+  intent,
+  simTimeS,
+  leadTimeS,
+  durationS,
+  magnitude,
+  targetSensorId,
+  configuration,
+}: {
+  eventId: string;
+  intent: LiveEventIntent;
+  simTimeS: number;
+  leadTimeS: number;
+  durationS: number;
+  magnitude: number;
+  targetSensorId: string;
+  configuration: NetworkSessionConfiguration;
+}): NetworkEventConfiguration {
+  const target = configuration.nodes.find(({ sensor_id }) => sensor_id === targetSensorId);
+  if (intent !== "environment_common" && intent !== "shared_instrument" && !target) {
+    throw new Error("Select a node from the executed session.");
+  }
+  if (intent === "shared_instrument" && configuration.nodes.length < 2) {
+    throw new Error("Shared instrument events require at least two nodes.");
+  }
+  if (![simTimeS, leadTimeS, durationS, magnitude].every(Number.isFinite)) {
+    throw new Error("Live event parameters must be finite numbers.");
+  }
+
+  const kind = liveEventKind(intent);
+  const targetSensorIds = intent === "environment_common"
+    ? []
+    : intent === "shared_instrument"
+      ? configuration.nodes.map(({ sensor_id }) => sensor_id)
+      : [target!.sensor_id];
+  const fieldOffsetT: Vector3 = intent === "clipping"
+    ? clippingStressVector(target!)
+    : [
+        ["environment_common", "node_bias", "shared_instrument"].includes(intent)
+          ? magnitude * 1e-9
+          : 0,
+        0,
+        0,
+      ];
+
+  return {
+    event_id: eventId,
+    kind,
+    start_time_s: futureLiveEventStart(simTimeS, leadTimeS, configuration),
+    duration_s: Math.max(0.001, durationS),
+    target_sensor_ids: targetSensorIds,
+    field_offset_T: fieldOffsetT,
+    drift_rate_T_per_s: intent === "node_drift" ? [magnitude * 1e-9, 0, 0] : [0, 0, 0],
+    noise_multiplier: intent === "node_noise" ? Math.max(1.0001, magnitude) : 1,
+  };
+}
+
+export function minimumLiveEventLeadS(configuration: Pick<NetworkSessionConfiguration, "sampling_rate_Hz" | "time_scale">): number {
+  return Math.max(0.1, 2 / configuration.sampling_rate_Hz, configuration.time_scale * 0.25);
+}
+
+export function futureLiveEventStart(
+  simTimeS: number,
+  requestedLeadS: number,
+  configuration: Pick<NetworkSessionConfiguration, "sampling_rate_Hz" | "time_scale">,
+): number {
+  const lead = Math.max(requestedLeadS, minimumLiveEventLeadS(configuration));
+  return Math.ceil((simTimeS + lead) * 1e6) / 1e6;
+}
+
+export async function submitLiveNetworkEvent({
+  sessionId,
+  event,
+  signal,
+  isCurrent,
+  scheduler = scheduleNetworkEvent,
+}: {
+  sessionId: string;
+  event: NetworkEventConfiguration;
+  signal?: AbortSignal;
+  isCurrent: () => boolean;
+  scheduler?: LiveEventScheduler;
+}): Promise<LiveEventRequestOutcome> {
+  if (!isCurrent()) {
+    return { status: "stale", detail: "The request was invalidated before transmission." };
+  }
+  try {
+    const response = await scheduler(sessionId, event, signal);
+    if (!isCurrent()) {
+      return {
+        status: "stale",
+        response,
+        detail: `The backend accepted this event for the previous session (${sessionId}), but the response is not attributed to the current session.`,
+      };
+    }
+    return {
+      status: "scheduled",
+      response,
+      detail: `Backend accepted · configuration v${response.configuration_version} · effective from frame ${response.effective_frame_id} · activation requested at t=${response.event.start_time_s.toFixed(6)} s.`,
+    };
+  } catch (error: unknown) {
+    if (!isCurrent()) {
+      return {
+        status: "stale",
+        detail: "The request was invalidated while in flight. Backend acceptance was not confirmed.",
+      };
+    }
+    return {
+      status: "rejected",
+      detail: errorMessage(error, "The backend rejected the live event request."),
+    };
+  }
+}
+
+function liveEventKind(intent: LiveEventIntent): EventKind {
+  switch (intent) {
+    case "environment_common": return "world_field_offset";
+    case "node_bias":
+    case "clipping": return "node_bias";
+    case "node_drift": return "node_drift";
+    case "node_noise": return "node_noise_burst";
+    case "shared_instrument": return "shared_instrument_offset";
+    case "dropout": return "dropout";
+    case "stuck": return "stuck";
+  }
+}
+
+function liveEventMagnitudeUnit(intent: LiveEventIntent): string | null {
+  if (["environment_common", "node_bias", "shared_instrument"].includes(intent)) return "nT";
+  if (intent === "node_drift") return "nT/s";
+  if (intent === "node_noise") return "×";
+  return null;
+}
+
+function clippingStressVector(node: SensorNodeConfiguration): Vector3 {
+  const limits = node.errors.saturation_limits_T ?? [
+    node.errors.saturation_limit_T,
+    node.errors.saturation_limit_T,
+    node.errors.saturation_limit_T,
+  ];
+  const axis = limits.reduce((lowest, value, index) => value < limits[lowest] ? index : lowest, 0);
+  const stress = Math.min(10, Math.max(limits[axis] * 4, limits[axis] + 1e-9));
+  return [axis === 0 ? stress : 0, axis === 1 ? stress : 0, axis === 2 ? stress : 0];
+}
+
+function prependLiveEventLog(current: LiveEventLogEntry[], entry: LiveEventLogEntry): LiveEventLogEntry[] {
+  return [entry, ...current].slice(0, 20);
+}
+
+function updateLiveEventLog(
+  current: LiveEventLogEntry[],
+  requestId: string,
+  patch: Pick<LiveEventLogEntry, "status" | "detail">,
+): LiveEventLogEntry[] {
+  return current.map((entry) => entry.requestId === requestId ? { ...entry, ...patch } : entry);
 }
 
 function ObservationQuality({ reading }: { reading: ReturnType<typeof readingForSensor> | undefined }) {

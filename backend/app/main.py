@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.api.demo import router as demo_router
 from app.api.features import router as features_router
 from app.api.health import router as health_router
 from app.api.network import router as network_router
@@ -15,6 +16,7 @@ app.include_router(quantum_health_router, prefix="/api")
 app.include_router(sensors_router, prefix="/api")
 app.include_router(network_router, prefix="/api")
 app.include_router(features_router, prefix="/api")
+app.include_router(demo_router, prefix="/api")
 app.include_router(quantum_preview_router, prefix="/api")
 app.include_router(workbench_router, prefix="/api")
 app.include_router(training_router, prefix="/api")

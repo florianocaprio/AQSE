@@ -2,6 +2,7 @@ import { useEffect, type JSX } from "react";
 
 import { WorkbookNavigation } from "./app/WorkbookNavigation";
 import { WORKSHEETS } from "./app/worksheetRegistry";
+import { useDemoPolling } from "./state/demo";
 import { useWorkbench } from "./state/workbench";
 import {
   useNetworkStream,
@@ -32,6 +33,7 @@ function App() {
   const { state, dispatch } = useWorkbench();
   useWorkbenchBootstrap();
   useNetworkStream();
+  useDemoPolling(state.network.session?.session_id ?? null);
   const ActiveWorksheet = WORKSHEET_COMPONENTS[state.active_worksheet];
 
   useEffect(() => {
@@ -65,15 +67,15 @@ function App() {
             <span className={`status-dot ${state.backend_health.status}`} />
             <span>Backend {state.backend_health.status}</span>
             <i aria-hidden="true" />
-            <span>Milestone 1C</span>
+            <span>End-to-end draft v1</span>
           </div>
         </header>
         <main id="worksheet-content" tabIndex={-1}>
           <ActiveWorksheet />
         </main>
         <footer className="workbook-footer">
-          <span>AQSE local research workbench · Milestone 1C</span>
-          <span>No physical QPU · no AFSE math · no neural output</span>
+          <span>AQSE local research workbench · end-to-end draft v1</span>
+          <span>Exact local simulation · research use only · no physical QPU</span>
         </footer>
       </div>
     </div>

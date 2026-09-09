@@ -6,10 +6,10 @@ import { TrainingLoopDiagram } from "./TrainingLoopDiagram";
 describe("TrainingLoopDiagram", () => {
   it("shows labels, gradient and FS geometry as distinct declared inputs", () => {
     const markup = renderToStaticMarkup(<TrainingLoopDiagram />);
-    expect(markup).toContain("X train");
-    expect(markup).toContain("y train");
-    expect(markup).toContain("Gradient ∇θL");
-    expect(markup).toContain("Empirical FS metric ḡ");
-    expect(markup).toContain("not connected");
+    expect(markup).toContain("Observed TRAIN features");
+    expect(markup).toContain("Loss(Kθ, y TRAIN)");
+    expect(markup).toContain("Gradient");
+    expect(markup).toContain("Fubini–Study metric");
+    expect(markup).toContain("Labels feed loss, not inference");
   });
 });

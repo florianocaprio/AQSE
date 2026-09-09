@@ -3,26 +3,45 @@ import { useState } from "react";
 import { errorMessage } from "../api/client";
 import { runQuantumDiagnostics } from "../api/health";
 import { CapabilityBadge } from "../components/CapabilityBadge";
+import {
+  activeBundleForTask,
+  compactId,
+  formatDemoNumber,
+  latestResultForSensor,
+} from "../components/DemoReadouts";
 import { WorksheetHeader } from "../components/WorksheetHeader";
 import { PipelineDiagram } from "../diagrams/PipelineDiagram";
 import { TrainingLoopDiagram } from "../diagrams/TrainingLoopDiagram";
 import { readingForSensor } from "../state/selectors";
-import {
-  featureResultIsStale,
-  quantumResultIsStale,
-  useWorkbench,
-} from "../state/workbench";
+import { useDemo } from "../state/demo";
+import { useWorkbench } from "../state/workbench";
 import type { ServiceHealth } from "../types/workbench";
 
 export function OverviewWorksheet() {
   const { state, dispatch } = useWorkbench();
+  const demo = useDemo();
   const session = state.network.session;
   const networkConfiguration = state.network.executed?.value ?? state.network.draft?.value;
   const latestFrame = state.network.observations.at(-1);
   const latestReading = latestFrame && state.network.selected_node_id
     ? readingForSensor(latestFrame, state.network.selected_node_id)
     : null;
-  const preview = state.quantum.preview;
+  const registry = demo.state.registry;
+  const analysis = demo.state.analysis?.session_id === session?.session_id
+    ? demo.state.analysis
+    : null;
+  const liveResult = latestResultForSensor(
+    analysis,
+    state.network.selected_node_id,
+    session?.session_id ?? null,
+  );
+  const localBundle = activeBundleForTask(registry, "aqse.local-change.v1");
+  const networkBundle = activeBundleForTask(registry, "aqse.network-pattern.v1");
+  const analysisActive = analysis && !["stopped", "failed"].includes(analysis.state);
+  const analysisCanStart = Boolean(
+    session && registry?.prepared && registry.active && !analysisActive,
+  );
+  const pipelineReady = Boolean(registry?.active && localBundle && networkBundle);
   const wmmProvider = state.network.field_providers.find(({ provider_id }) =>
     provider_id.toLowerCase().includes("wmm") || provider_id.toLowerCase().includes("world"),
   );
@@ -52,7 +71,48 @@ export function OverviewWorksheet() {
               : "The network service can be healthy while no session is running."}
           </small>
         </article>
+        <article className="status-card">
+          <p className="panel-kicker">CONTINUOUS ANALYSIS</p>
+          <strong className={`large-status ${analysis?.state ?? "idle"}`}>
+            {analysis?.state.replaceAll("_", " ").toUpperCase() ?? "NOT STARTED"}
+          </strong>
+          <small>
+            {analysis
+              ? `${analysis.completed_window_count} windows · age ${formatAge(analysis.result_age_ms)}`
+              : "Start analysis explicitly after a prepared bundle and simulator session are available."}
+          </small>
+          <div className="compact-action-row">
+            <button
+              type="button"
+              className="button button-primary"
+              disabled={!analysisCanStart || demo.state.analysis_request === "loading"}
+              onClick={() => session && void demo.startAnalysis(session.session_id)}
+            >
+              Start analysis
+            </button>
+            <button
+              type="button"
+              className="button button-secondary"
+              disabled={!session || !analysisActive || demo.state.analysis_request === "loading"}
+              onClick={() => session && void demo.stopAnalysis(session.session_id)}
+            >
+              Stop
+            </button>
+          </div>
+        </article>
       </div>
+
+      {demo.state.registry_error && (
+        <p className="inline-message error-message" role="alert">{demo.state.registry_error}</p>
+      )}
+      {demo.state.analysis_error && (
+        <p className="inline-message error-message" role="alert">{demo.state.analysis_error}</p>
+      )}
+      {registry && !registry.prepared && (
+        <p className="inline-message warning-message" role="status">
+          End-to-end artifacts are not prepared: {registry.preparation_detail}
+        </p>
+      )}
 
       <div className="worksheet-grid three-summary-columns">
         <article className="workbench-panel">
@@ -61,19 +121,38 @@ export function OverviewWorksheet() {
         </article>
         <article className="workbench-panel">
           <div className="panel-heading-row">
-            <div><p className="panel-kicker">FEATURE SUMMARY</p><h2>{state.features.result?.profile.profile_id ?? "Not executed"}</h2></div>
-            {state.features.result && <span className={featureResultIsStale(state) ? "result-badge stale" : "result-badge"}>{featureResultIsStale(state) ? "STALE" : "CURRENT"}</span>}
+            <div><p className="panel-kicker">LIVE STATE8 WINDOW</p><h2>{liveResult?.profile_id ?? "No live result"}</h2></div>
+            {liveResult && <span className={liveResult.feature_valid ? "result-badge" : "result-badge stale"}>{liveResult.feature_valid ? "VALID" : "ABSTAIN"}</span>}
           </div>
-          <dl className="quality-grid"><div><dt>Valid windows</dt><dd>{state.features.result?.valid_window_count ?? "—"}</dd></div><div><dt>Invalid windows</dt><dd>{state.features.result?.invalid_window_count ?? "—"}</dd></div><div><dt>Channel</dt><dd>{state.features.result?.profile.channel ?? state.features.channel}</dd></div><div><dt>Profile</dt><dd>{state.features.result?.profile.extractor_version ?? "—"}</dd></div></dl>
+          <dl className="quality-grid"><div><dt>Sensor</dt><dd>{liveResult?.sensor_id ?? "—"}</dd></div><div><dt>Context</dt><dd>{liveResult?.context_mode.replaceAll("_", " ") ?? "—"}</dd></div><div><dt>Window</dt><dd>{liveResult ? `${liveResult.window_start_s.toFixed(1)}–${liveResult.window_end_exclusive_s.toFixed(1)} s` : "—"}</dd></div><div><dt>Reference</dt><dd title={liveResult?.reference_id}>{compactId(liveResult?.reference_id)}</dd></div><div className="span-two"><dt>Quality</dt><dd>{liveResult?.quality_flags.length ? liveResult.quality_flags.join(", ") : liveResult ? "eligible" : "—"}</dd></div></dl>
         </article>
         <article className="workbench-panel">
           <div className="panel-heading-row">
-            <div><p className="panel-kicker">QUANTUM SUMMARY</p><h2>{preview?.backend ?? "Not executed"}</h2></div>
-            {preview && <span className={quantumResultIsStale(state) ? "result-badge stale" : "result-badge"}>{quantumResultIsStale(state) ? "STALE" : "CURRENT"}</span>}
+            <div><p className="panel-kicker">MODEL OUTPUT</p><h2>{liveResult?.displayed_class ?? "No prediction"}</h2></div>
+            {liveResult && <span className={liveResult.uncertain ? "result-badge stale" : "result-badge"}>{liveResult.uncertain ? "UNCERTAIN" : "SCORED"}</span>}
           </div>
-          <dl className="quality-grid"><div><dt>Kernel</dt><dd>{preview ? `${preview.reference_kernel.length} × ${preview.reference_kernel[0]?.length ?? 0}` : "—"}</dd></div><div><dt>Execution</dt><dd>{preview ? `${preview.execution_duration_ms.toFixed(3)} ms` : "—"}</dd></div><div><dt>Scaler</dt><dd>{preview?.scaler.version ?? "—"}</dd></div><div><dt>θ snapshot</dt><dd>{state.quantum.theta_executed?.id ?? "—"}</dd></div></dl>
+          <dl className="quality-grid"><div><dt>Task</dt><dd>{liveResult?.task_id ?? "—"}</dd></div><div><dt>Top score</dt><dd>{formatDemoNumber(liveResult?.top_score ?? null)}</dd></div><div><dt>Margin</dt><dd>{formatDemoNumber(liveResult?.top_two_margin ?? null)}</dd></div><div><dt>Processing</dt><dd>{liveResult ? `${liveResult.processing_duration_ms.toFixed(2)} ms` : "—"}</dd></div><div className="span-two"><dt>Conditional attribution</dt><dd>{liveResult?.attribution_note ?? "—"}</dd></div></dl>
         </article>
       </div>
+
+      <article className="workbench-panel demo-bundle-panel">
+        <div className="panel-heading-row">
+          <div><p className="panel-kicker">ACTIVE COMPATIBLE BUNDLE</p><h2>{registry?.active ? `Application generation ${registry.active.generation}` : "No bundle applied"}</h2></div>
+          <span className={pipelineReady ? "result-badge" : "result-badge stale"}>{pipelineReady ? "COHESIVE PAIR" : "UNAVAILABLE"}</span>
+        </div>
+        <dl className="quality-grid">
+          <div><dt>Application</dt><dd title={registry?.active?.application_id ?? undefined}>{compactId(registry?.active?.application_id)}</dd></div>
+          <div><dt>Selection freeze</dt><dd title={registry?.selection_freeze_id ?? undefined}>{compactId(registry?.selection_freeze_id)}</dd></div>
+          <div><dt>Local bundle</dt><dd title={localBundle?.bundle_id}>{compactId(localBundle?.bundle_id)}</dd></div>
+          <div><dt>Network bundle</dt><dd title={networkBundle?.bundle_id}>{compactId(networkBundle?.bundle_id)}</dd></div>
+          <div><dt>Analysis epoch</dt><dd>{analysis?.worker_epoch ?? "—"}</dd></div>
+          <div><dt>Reference progress</dt><dd>{analysis ? `${(analysis.reference_progress * 100).toFixed(0)}%` : "—"}</dd></div>
+          <div><dt>Data / result age</dt><dd>{liveResult ? `${formatAge(liveResult.data_age_ms)} / ${formatAge(analysis?.result_age_ms ?? null)}` : "—"}</dd></div>
+          <div><dt>Queue / skipped</dt><dd>{analysis ? `${analysis.queue_depth} / ${analysis.skipped_window_count}` : "—"}</dd></div>
+          <div><dt>Latency p50 / p95</dt><dd>{analysis && analysis.latency_p50_ms !== null && analysis.latency_p95_ms !== null ? `${analysis.latency_p50_ms.toFixed(2)} / ${analysis.latency_p95_ms.toFixed(2)} ms` : "—"}</dd></div>
+        </dl>
+        <p className="boundary-note">{registry?.scientific_label ?? "Registry status has not been received."}</p>
+      </article>
 
       <div className="worksheet-grid two-columns">
         <article className="workbench-panel span-two">
@@ -84,10 +163,18 @@ export function OverviewWorksheet() {
             </div>
             <span className="result-badge">OBSERVATIONS ONLY</span>
           </div>
-          <PipelineDiagram />
+          <PipelineDiagram stages={[
+            { label: "Sensor", detail: "observations", status: session ? "implemented" : "architecture_defined" },
+            { label: "State8", detail: "causal features", status: liveResult ? "implemented" : "architecture_defined" },
+            { label: "Encoder", detail: "frozen scaler", status: liveResult?.encoded_angles ? "implemented" : "architecture_defined" },
+            { label: "VQC / TQK", detail: "exact state", status: pipelineReady ? "implemented" : "architecture_defined" },
+            { label: "AFSE", detail: "Nyström vector", status: liveResult?.afse_vector ? "implemented" : "architecture_defined" },
+            { label: "Neural", detail: "model scores", status: liveResult?.class_scores ? "implemented" : "architecture_defined" },
+            { label: "Output", detail: "conditional", status: liveResult?.displayed_class ? "implemented" : "architecture_defined" },
+          ]} />
           <p className="boundary-note">
             Ground truth is available through a separate simulator validation channel and is never
-            forwarded to feature extraction, the quantum preview, AFSE, or any future model input.
+            forwarded to State8 extraction, the protected quantum representation, AFSE, or the fitted model.
           </p>
         </article>
 
@@ -120,14 +207,16 @@ export function OverviewWorksheet() {
           <div className="panel-heading-row">
             <div>
               <p className="panel-kicker">TRAINING ARCHITECTURE</p>
-              <h2>QNG boundary</h2>
+              <h2>Bounded QNG training</h2>
             </div>
-            <CapabilityBadge status="available_not_connected" compact />
+            <span className={demo.state.training?.state === "completed" ? "result-badge" : "result-badge stale"}>
+              {demo.state.training?.state.replaceAll("_", " ").toUpperCase() ?? "IDLE"}
+            </span>
           </div>
           <TrainingLoopDiagram />
           <p className="boundary-note">
-            Sensor-integrated QNG training is pending. The explicit quantum preview uses fixed θ
-            and cannot update parameters.
+            QNG runs only from an explicit bounded training job. Completion creates candidate
+            artifacts; it never promotes them automatically. Live inference never runs QNG.
           </p>
         </article>
       </div>
@@ -214,4 +303,9 @@ function formatReading(reading: ReturnType<typeof readingForSensor>): string {
     return `[${reading.components_T.map((value) => `${(value * 1e9).toFixed(2)} nT`).join(", ")}]`;
   }
   return reading.value_T === null ? "missing" : `${(reading.value_T * 1e9).toFixed(2)} nT`;
+}
+
+function formatAge(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "—";
+  return value < 1_000 ? `${value.toFixed(0)} ms` : `${(value / 1_000).toFixed(2)} s`;
 }

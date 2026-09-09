@@ -1,8 +1,14 @@
 import { useMemo } from "react";
 
 import { CapabilityBadge } from "../components/CapabilityBadge";
+import {
+  compactId,
+  formatDemoNumber,
+  latestResultForSensor,
+} from "../components/DemoReadouts";
 import { WorksheetHeader } from "../components/WorksheetHeader";
 import { latestContiguousVectorSeries } from "../state/selectors";
+import { useDemo } from "../state/demo";
 import { featureResultIsStale, useWorkbench } from "../state/workbench";
 import { useWorkbenchActions } from "../state/useWorkbenchController";
 import type { FeatureWindowConfiguration } from "../types/features";
@@ -20,6 +26,7 @@ const EXPECTED_FEATURES = [
 
 export function FeaturesWorksheet() {
   const { state, dispatch } = useWorkbench();
+  const { state: demoState } = useDemo();
   const { extractFeatures } = useWorkbenchActions();
   const draft = state.features.draft.value;
   const result = state.features.result;
@@ -37,6 +44,11 @@ export function FeaturesWorksheet() {
     [networkConfiguration, selectedNode, state.network.observations],
   );
   const selectedConfig = networkConfiguration?.nodes.find(({ sensor_id }) => sensor_id === selectedNode);
+  const liveResult = latestResultForSensor(
+    demoState.analysis,
+    selectedNode,
+    state.network.session?.session_id ?? null,
+  );
   const requiredSamples = Math.max(
     16,
     Math.round(draft.duration_s * (networkConfiguration?.sampling_rate_Hz ?? 0)),
@@ -58,9 +70,62 @@ export function FeaturesWorksheet() {
         index="03"
         eyebrow="CAUSAL FEATURE PIPELINE"
         title="Features"
-        description="Extract the canonical eight-dimensional harmonic profile from measured vector observations. Complete windows only; truth is excluded by schema."
+        description="Inspect live causal State8 features from measured observations. The legacy harmonic extractor remains available below as a separate manual workflow; truth is excluded by schema."
         actions={<CapabilityBadge status={state.capabilities?.vector_sensor.status ?? "available_not_connected"} />}
       />
+
+      <article className="workbench-panel demo-live-feature-panel">
+        <div className="panel-heading-row">
+          <div>
+            <p className="panel-kicker">LIVE CONNECTED STATE8 PROFILE</p>
+            <h2>{liveResult?.profile_id ?? "Awaiting an analyzed window"}</h2>
+          </div>
+          {liveResult && (
+            <span className={liveResult.feature_valid ? "result-badge" : "result-badge stale"}>
+              {liveResult.feature_valid ? "QUANTUM ELIGIBLE" : "QUALITY ABSTENTION"}
+            </span>
+          )}
+        </div>
+        {liveResult ? (
+          <>
+            <dl className="quality-grid demo-context-grid">
+              <div><dt>Sensor</dt><dd>{liveResult.sensor_id}</dd></div>
+              <div><dt>Context</dt><dd>{liveResult.context_mode.replaceAll("_", " ")}</dd></div>
+              <div><dt>Window</dt><dd>{liveResult.window_start_s.toFixed(3)}–{liveResult.window_end_exclusive_s.toFixed(3)} s</dd></div>
+              <div><dt>Received fraction</dt><dd>{formatDemoNumber(liveResult.feature_values[7] ?? null)}</dd></div>
+              <div><dt>Reference version</dt><dd title={liveResult.reference_id}>{compactId(liveResult.reference_id)}</dd></div>
+              <div><dt>Profile fingerprint</dt><dd title={liveResult.profile_fingerprint}>{compactId(liveResult.profile_fingerprint)}</dd></div>
+              <div><dt>Peer context</dt><dd>{liveResult.peer_sensor_ids.length ? liveResult.peer_sensor_ids.join(", ") : "none"}</dd></div>
+              <div><dt>Quality flags</dt><dd>{liveResult.quality_flags.length ? liveResult.quality_flags.join(", ") : "none"}</dd></div>
+            </dl>
+            <div className="canonical-feature-grid demo-feature-grid">
+              {liveResult.feature_names.map((name, index) => {
+                const value = liveResult.feature_values[index] ?? null;
+                return (
+                  <article
+                    className={`canonical-feature-card${value === null ? " invalid" : ""}`}
+                    key={`${liveResult.result_id}-${name}`}
+                  >
+                    <span>F{index}</span>
+                    <strong>{name}</strong>
+                    <output>{formatDemoNumber(value)}</output>
+                    <small>{liveResult.feature_units[index] ?? "—"}{value === null ? " · unavailable" : ""}</small>
+                  </article>
+                );
+              })}
+            </div>
+            <p className="boundary-note">{liveResult.attribution_note}</p>
+          </>
+        ) : (
+          <p className="empty-copy">
+            Start a simulator session and continuous analysis from Overview. No State8 values are fabricated while reference acquisition or analysis is unavailable.
+          </p>
+        )}
+        {demoState.analysis_error && <p className="inline-message error-message" role="alert">{demoState.analysis_error}</p>}
+      </article>
+
+      <details className="legacy-workspace demo-legacy-workspace">
+        <summary>Legacy harmonic profile · separate manual workflow</summary>
 
       <div className="worksheet-grid feature-layout-grid">
         <aside className="workbench-panel configuration-panel">
@@ -141,6 +206,7 @@ export function FeaturesWorksheet() {
           </article>
         </div>
       </div>
+      </details>
     </section>
   );
 }

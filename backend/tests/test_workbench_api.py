@@ -36,15 +36,15 @@ def measured_payload() -> dict[str, object]:
     }
 
 
-def test_workbench_capabilities_are_honest_about_pending_science() -> None:
+def test_workbench_capabilities_report_connected_demo_research_components() -> None:
     response = client.get("/api/workbench/capabilities")
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["quantum_preview"]["status"] == "implemented"
-    assert payload["qng_training"]["status"] == "available_not_connected"
-    assert payload["local_embedding_afse"]["status"] == "architecture_defined"
-    assert payload["neural_model"]["status"] == "not_implemented"
+    assert payload["qng_training"]["status"] == "implemented"
+    assert payload["local_embedding_afse"]["status"] == "implemented"
+    assert payload["neural_model"]["status"] == "implemented"
     assert payload["physical_qpu"]["status"] == "not_implemented"
 
 
