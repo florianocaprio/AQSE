@@ -34,6 +34,7 @@ from app.training.models import (
     EpisodePlan,
     LabeledEpisodePlan,
     NoiseRegime,
+    RawSourceReference,
     SplitAssignment,
     WindowDisposition,
 )
@@ -63,11 +64,23 @@ class GeneratedEpisode:
     windows: tuple[WindowDisposition, ...]
     coverage: EpisodeCoverage
     feature_response: FeatureExtractionResponse
+    raw_source: RawSourceReference
 
     @property
-    def observation_digest(self) -> str:
+    def observation_content_digest(self) -> str:
+        """Identify normalized observable content independently of export identity."""
+
         return scientific_digest(
-            {"episode_id": self.plan.episode_id, "sensor_id": "M1"},
+            {
+                "schema_version": "aqse.observation-content.v1",
+                "sensor_type": "magnetometer_vector3",
+                "arrays": {
+                    "time_s": {"unit": "s"},
+                    "measured_field_T": {"unit": "T"},
+                    "temperature_K": {"unit": "K"},
+                    "saturation_mask": {"unit": "boolean"},
+                },
+            },
             {
                 "time_s": self.time_s,
                 "measured_field_T": self.measured_field_T,
@@ -75,6 +88,28 @@ class GeneratedEpisode:
                 "saturation_mask": self.saturation_mask,
             },
         )
+
+    @property
+    def observation_binding_digest(self) -> str:
+        """Bind content to episode, lineage and preserved raw-source provenance."""
+
+        return hashlib.sha256(
+            canonical_json_bytes(
+                {
+                    "schema_version": "aqse.observation-binding.v1",
+                    "episode_id": self.plan.episode_id,
+                    "lineage_id": self.plan.lineage_id,
+                    "content_digest": self.observation_content_digest,
+                    "raw_source": self.raw_source.model_dump(mode="json"),
+                }
+            )
+        ).hexdigest()
+
+    @property
+    def observation_digest(self) -> str:
+        """Compatibility alias for the content digest used by split isolation."""
+
+        return self.observation_content_digest
 
 
 @dataclass(frozen=True)
@@ -277,6 +312,15 @@ def generate_episode(specification: LabeledEpisodePlan) -> GeneratedEpisode:
         windows=windows,
         coverage=coverage,
         feature_response=response,
+        raw_source=RawSourceReference(
+            source_id="raw-"
+            + hashlib.sha256(
+                f"{plan.generation_seed}:{plan.signal_seed}:M1".encode("utf-8")
+            ).hexdigest()[:24],
+            sensor_id="M1",
+            start_index=0,
+            end_index=len(time_s),
+        ),
     )
 
 
@@ -339,30 +383,13 @@ def build_development_dataset(
 
 
 def dataset_identity_metadata(build: DatasetBuild) -> dict[str, Any]:
-    """Return stable scientific metadata; runtime and HMAC fields are excluded."""
+    """Return numeric-content identity without export or operational identifiers."""
 
     return {
-        "schema_version": "aqse.dataset-scientific-identity.v1",
-        "kind": build.kind,
-        "master_seed": build.master_seed,
-        "split_seed": build.split_seed,
-        "fixed_epoch_utc": FIXED_EPOCH.isoformat().replace("+00:00", "Z"),
-        "sampling_rate_hz": SAMPLE_RATE_HZ,
-        "duration_s": DURATION_S,
-        "sample_count": SAMPLE_COUNT,
+        "schema_version": "aqse.dataset-numeric-content.v1",
+        "observation_schema": "aqse.observation-content.v1",
         "feature_profile": build.episodes[0].feature_response.profile.model_dump(mode="json"),
-        "plans": [plan.model_dump(mode="json") for plan in build.plans],
-        "assignments": [item.model_dump(mode="json") for item in build.assignments],
-        "label_policy": "aqse.white-noise-regime.v1",
-        "label_artifact_sha256": hashlib.sha256(
-            canonical_json_bytes([label.model_dump(mode="json") for label in build.labels])
-        ).hexdigest(),
-        "encoding": {
-            "expected": "aqse.tqk8.encoding.phase-direct.v1",
-            "scaler_id": None,
-            "theta_id": None,
-            "reference_bank_id": None,
-            "model_id": None,
-            "fit_state": "not-fitted",
-        },
+        "observation_content_digests": sorted(
+            episode.observation_content_digest for episode in build.episodes
+        ),
     }

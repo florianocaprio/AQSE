@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -67,6 +67,8 @@ class ObservationInterval(FrozenModel):
     sensor_id: str
     start_index: int = Field(ge=0)
     end_index: int = Field(gt=0)
+    source_id: str | None = None
+    relation: Literal["original", "replay", "paired"] = "original"
 
     @model_validator(mode="after")
     def validate_interval(self) -> ObservationInterval:
@@ -121,7 +123,7 @@ class FileRecord(FrozenModel):
     endianness: Literal["little", "not-applicable"] | None = None
 
 
-class DatasetManifest(FrozenModel):
+class LegacyDatasetManifest(FrozenModel):
     schema_version: Literal["aqse.dataset-manifest.v1"] = "aqse.dataset-manifest.v1"
     dataset_id: str
     kind: Literal["pilot", "development"]
@@ -145,6 +147,93 @@ class DatasetManifest(FrozenModel):
     fit_state: Literal["not-fitted"] = "not-fitted"
 
 
+class DatasetManifest(FrozenModel):
+    schema_version: Literal["aqse.dataset-manifest.v2"] = "aqse.dataset-manifest.v2"
+    dataset_id: str
+    kind: Literal["pilot", "development"]
+    scientific_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    numeric_content_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    feature_profile_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    software_provenance_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    generation_policy: Literal["aqse.milestone-1d1.white-noise.v1"] = (
+        "aqse.milestone-1d1.white-noise.v1"
+    )
+    split_policy: Literal["pilot-only", "stratified-lineage-60-20-20"]
+    fixed_epoch_utc: Literal["2026-01-01T00:00:00Z"] = "2026-01-01T00:00:00Z"
+    partition_summaries: tuple[PartitionSummary, ...]
+    files: tuple[FileRecord, ...]
+    test_state: Literal["not-applicable", "sealed"]
+    expected_encoding: Literal["aqse.tqk8.encoding.phase-direct.v1"] = (
+        "aqse.tqk8.encoding.phase-direct.v1"
+    )
+    scaler_id: None = None
+    theta_id: None = None
+    reference_bank_id: None = None
+    model_id: None = None
+    fit_state: Literal["not-fitted"] = "not-fitted"
+
+
+class RawSourceReference(FrozenModel):
+    source_id: str = Field(min_length=1, max_length=160)
+    sensor_id: str = Field(min_length=1, max_length=128)
+    start_index: int = Field(ge=0)
+    end_index: int = Field(gt=0)
+    relation: Literal["original", "replay", "paired"] = "original"
+
+    @model_validator(mode="after")
+    def validate_interval(self) -> RawSourceReference:
+        if self.end_index <= self.start_index:
+            raise ValueError("raw source interval end must follow its start")
+        return self
+
+
+class ArchivedWindowRecord(FrozenModel):
+    window_id: str
+    acquisition_id: str
+    sensor_id: str
+    start_index: int = Field(ge=0)
+    end_index: int = Field(gt=0)
+    start_time_s: float
+    end_time_s: float
+    center_time_s: float
+    quality: dict[str, Any]
+
+
+class ObservableProvenance(FrozenModel):
+    schema_version: Literal["aqse.observable-provenance.v1"] = "aqse.observable-provenance.v1"
+    field_unit: Literal["T"] = "T"
+    temperature_unit: Literal["K"] = "K"
+    time_unit: Literal["s"] = "s"
+    calibration_id: Literal["identity-calibration.v1"] = "identity-calibration.v1"
+    pose_id: Literal["world-aligned-origin.v1"] = "world-aligned-origin.v1"
+    feature_profile_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
+    software_provenance_ref: Literal["provenance/software.json"] = "provenance/software.json"
+
+
+class PartitionMetadataV2(FrozenModel):
+    schema_version: Literal["aqse.partition-metadata.v2"] = "aqse.partition-metadata.v2"
+    partition: DatasetPartition
+    episode_ids: tuple[str, ...]
+    lineage_ids: tuple[str, ...]
+    profile: dict[str, Any]
+    observable_provenance: ObservableProvenance
+    raw_sources: tuple[RawSourceReference, ...]
+    coverage: tuple[EpisodeCoverage, ...]
+    windows: tuple[tuple[ArchivedWindowRecord, ...], ...]
+
+
+class SoftwareProvenance(FrozenModel):
+    schema_version: Literal["aqse.software-provenance.v1"] = "aqse.software-provenance.v1"
+    algorithm_ids: tuple[str, ...]
+    unit_conversions: dict[str, str]
+    calibration_id: Literal["identity-calibration.v1"] = "identity-calibration.v1"
+    pose_id: Literal["world-aligned-origin.v1"] = "world-aligned-origin.v1"
+    repository_base_sha: str
+    repository_dirty: bool | None
+    source_hashes: dict[str, str]
+    runtime_versions: dict[str, str]
+
+
 class ExecutionMetadata(FrozenModel):
     schema_version: Literal["aqse.dataset-execution.v1"] = "aqse.dataset-execution.v1"
     dataset_id: str
@@ -162,10 +251,11 @@ class TestAccessAuthorization(FrozenModel):
 
 
 class TestAccessLedgerEntry(FrozenModel):
-    schema_version: Literal["aqse.test-access-ledger.v1"] = "aqse.test-access-ledger.v1"
+    schema_version: Literal["aqse.test-access-ledger.v2"] = "aqse.test-access-ledger.v2"
     sequence: int = Field(ge=0)
     event: Literal["sealed", "opened"]
     dataset_id: str
+    scientific_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
     occurred_at_utc: str
     actor: str
     reason: str

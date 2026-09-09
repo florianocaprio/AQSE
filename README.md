@@ -159,9 +159,18 @@ con `AQSE_ARTIFACT_ROOT`; `AQSE_ARTIFACT_LIMIT_BYTES` impone il limite operativo
 predefinito di 1 GiB includendo file temporanei. Manifest e payload scientifici sono
 read-only, mentre il ledger di accesso al test è concatenato e append-only.
 
-Le osservazioni, le otto feature e le etichette sono file distinti. Il test di sviluppo
-è serializzato e verificato dall'archiver, ma resta sealed: la normale API di caricamento
-lo rifiuta e 1D.1 non ne stampa distribuzioni di qualità né metriche predittive.
+Per i nuovi archivi il contratto v2 separa osservazioni tipizzate, etichette e
+piani di generazione. `features.npy` è la rappresentazione numerica canonica;
+il window ledger non duplica le feature e viene verificato ricalcolandole dal
+solo raw osservabile prima di emettere HMAC effimeri. La verifica opaca controlla
+allowlist, dimensioni e SHA-256 senza deserializzare partizioni. Il test di
+sviluppo è validato tecnicamente dall'archiver prima della pubblicazione ma
+resta sealed: autorizzazione e ledger precedono ogni lettura semantica.
+
+Gli archivi storici v1 restano verificabili in modo opaco ma non vengono
+dichiarati conformi al v2 e non sono migrati automaticamente. Il contratto e la
+proposta di migrazione non eseguita sono descritti in
+[`docs/training/milestone-1d-1-archive-v2.md`](docs/training/milestone-1d-1-archive-v2.md).
 
 ### Percorso demo consigliato
 

@@ -143,6 +143,83 @@ also reports 29 historical files outside this change set; all 12 new Python
 files are formatter-clean. They were not mass-formatted because that would
 rewrite unrelated and protected-scope code.
 
+## External-review corrective addendum — 2026-09-09
+
+This addendum records new evidence without rewriting the measurements above.
+The review baseline was commit
+`8691fd08afadb4a1c6e061977fdb4a09bee40db5`, based on
+`1cb07cdccabf9c655a63f2b23aab37383ae90b69`. Local and remote milestone HEAD
+matched and the working tree was clean before reproduction.
+
+Six regressions were first run against the real application code using only
+temporary pytest archives. All six failed as the review predicted: renamed
+duplicate content crossed partitions, train and denied-test requests decoded
+test arrays, an unmanifested NPY was returned, generation plans reached the
+loader result, and a window-quality mutation could be hidden by refreshing
+ordinary file checksums. These are reproduced failures, distinct from the
+external audit and from the earlier 176-test baseline.
+
+The corrective implementation creates archive contract v2 for new fixtures:
+
+- observation content identity is independent from episode/export identity;
+  a separate binding covers episode, lineage, raw-source origin and interval;
+- the writer validates plan/label/assignment correspondence, content
+  duplicates and raw-source overlap through the actual archive path;
+- opaque verification streams sizes and SHA-256 without NumPy or reserved
+  semantic decoding; authorization and an identity-bound, serialized ledger
+  append precede any test semantic load;
+- feature values have one canonical archived copy in `features.npy`; window
+  identity, indices, times, observable quality, coverage, units and complete
+  profile fingerprint are bound to scientific identity and verified by
+  versioned raw-observable recalculation before HMAC re-signing;
+- typed observation, label and generation loaders form separate channels;
+- manifest-only allowlisting, per-read containment/symlink checks, bounded JSON,
+  pre-allocation NPY-header validation, dtype/shape/physical-size checks,
+  non-finite rejection and complete pre-publication candidate validation are
+  enforced;
+- software provenance records effective source hashes, runtime versions,
+  algorithm/schema IDs, units, calibration/pose and discoverable Git base/dirty
+  state. Operational write metadata remains outside numeric content identity.
+
+The post-correction training package currently passes **50 tests**. These cover
+R1--R5, including real-writer duplicate and independent-stream cases, semantic
+I/O spies, denied and fixture-authorized sealing, concurrent ledger appends,
+array/window/quality/index/fingerprint/unit mutations, extra files, symlinks,
+oversized headers, wrong shapes, non-finite values, JSON bounds, candidate
+cleanup, observable DTO exclusion and software provenance. Final full-suite
+counts are recorded only after the release validation below is rerun.
+
+Historical study archives remain unchanged v1 artifacts. V1 has bounded opaque
+verification support only and is not described as conforming to v2. The
+separate migration/rebuild proposal is documented but was not executed; no
+study archive or sealed-study ledger was semantically opened, regenerated,
+rewritten, or migrated during this correction.
+
+The GUI received no functional or visual changes in this corrective pass.
+STUCK/gap handling and the QNG diagram remain preserved. Preset/session
+controls, cancellation and post-unmount request behavior remain review items;
+no claim is made that every asynchronous path is resolved.
+
+Final corrective validation on the uncommitted candidate produced:
+
+- `make test`: **200 backend tests passed**, including **8/8 original TQK8
+  tests**; Ruff passed; frontend typecheck and ESLint passed; **32 frontend
+  tests passed** across 10 files; production Vite build passed;
+- `docker compose ps`: backend and frontend healthy on rebuilt images;
+- lightweight HTTP checks on the final recreated services: backend health 200
+  in 1.76 ms, quantum readiness 200 in 2.59 ms, and frontend 200 in 4.70 ms;
+- `git diff --check`: passed;
+- opaque before/after SHA-256 manifest: all **39 historical study artifact
+  files unchanged**, including the sealed-test payloads and ledger.
+
+One earlier diagnostic invocation used `docker compose exec` without the
+Makefile's read-only `/workspace/docker-compose.yml` test mount: 196 tests
+passed and only `test_docker_healthcheck.py` failed with `StopIteration`
+because that fixture path was absent. The official `make test` invocation
+provided the required mount and the same test passed. There were no skips.
+The only non-blocking warnings remain Starlette's `BlockingPortal` deprecation
+and Vite's existing chunk-size advisory.
+
 ## Explicitly deferred
 
 - production phase encoding and scaler fitting (1D.2);

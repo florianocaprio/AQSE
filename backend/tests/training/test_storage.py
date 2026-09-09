@@ -16,6 +16,8 @@ from app.training.models import (
 )
 from app.training.storage import (
     LEDGER_NAME,
+    load_labels,
+    load_observations,
     load_partition,
     resign_partition_windows,
     verify_archive,
@@ -44,9 +46,10 @@ def test_labels_are_separate_and_no_normalization_is_fitted(
     small_pilot_build,
 ) -> None:
     path, manifest, _ = write_dataset(small_pilot_build, root=tmp_path)
-    loaded = load_partition(path, DatasetPartition.PILOT)
-    assert "target" not in loaded["arrays"]
-    assert {item["target"] for item in loaded["labels"]["labels"]} == {-1, 1}
+    loaded = load_observations(path, DatasetPartition.PILOT)
+    labels = load_labels(path, DatasetPartition.PILOT)
+    assert not hasattr(loaded, "target")
+    assert {item.target for item in labels} == {-1, 1}
     assert manifest.fit_state == "not-fitted"
     assert manifest.scaler_id is None
     assert manifest.theta_id is None
@@ -86,7 +89,7 @@ def test_development_test_is_sealed_and_fixture_open_is_logged(
             fixture_only=True,
         ),
     )
-    assert loaded["arrays"]["features"].shape[-1] == 8
+    assert loaded.features.shape[-1] == 8
     ledger = [json.loads(line) for line in (path / LEDGER_NAME).read_text().splitlines()]
     assert [entry["event"] for entry in ledger] == ["sealed", "opened"]
     assert ledger[-1]["fixture_only"] is True
@@ -167,7 +170,12 @@ def test_archive_rejects_unsafe_or_corrupt_content(
         record["file_sha256"] = file_sha256(target)
     manifest_path.write_text(json.dumps(manifest))
     with pytest.raises((ValueError, TypeError)):
-        verify_archive(path)
+        if mutation in {"truncated", "object"}:
+            load_observations(path, DatasetPartition.PILOT)
+        elif mutation == "labels":
+            load_labels(path, DatasetPartition.PILOT)
+        else:
+            verify_archive(path)
 
 
 def test_archive_rejects_oversized_files_before_loading(

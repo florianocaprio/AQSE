@@ -64,13 +64,21 @@ def validate_split(
     assignments: tuple[SplitAssignment, ...],
     labels: tuple[EpisodeLabel, ...],
 ) -> None:
+    label_ids = [item.episode_id for item in labels]
+    if len(set(label_ids)) != len(label_ids):
+        raise ValueError("episode labels must have unique identifiers")
     if len(assignments) != len(labels):
         raise ValueError("every labeled episode must have exactly one split assignment")
     if len({item.episode_id for item in assignments}) != len(assignments):
         raise ValueError("an episode cannot appear in more than one partition")
 
+    labels_by_id = {item.episode_id: item for item in labels}
+    if {item.episode_id for item in assignments} != set(labels_by_id):
+        raise ValueError("split assignments and labels must reference the same episodes")
     lineage_partitions: dict[str, set[DatasetPartition]] = defaultdict(set)
     for assignment in assignments:
+        if labels_by_id[assignment.episode_id].lineage_id != assignment.lineage_id:
+            raise ValueError("split assignment lineage does not match its label")
         lineage_partitions[assignment.lineage_id].add(assignment.partition)
     leaking = [lineage for lineage, parts in lineage_partitions.items() if len(parts) > 1]
     if leaking:
@@ -118,19 +126,25 @@ def validate_no_cross_partition_raw_overlaps(
     """
 
     partitions = {item.episode_id: item.partition for item in assignments}
+    if len({item.episode_id for item in intervals}) != len(intervals):
+        raise ValueError("every episode must have one unambiguous raw source interval")
+    if {item.episode_id for item in intervals} != set(partitions):
+        raise ValueError("raw source intervals must reference every assigned episode")
     ordered = sorted(
         intervals,
-        key=lambda item: (item.lineage_id, item.sensor_id, item.start_index),
+        key=lambda item: (item.source_id or item.lineage_id, item.sensor_id, item.start_index),
     )
     for index, left in enumerate(ordered):
         for right in ordered[index + 1 :]:
-            if (left.lineage_id, left.sensor_id) != (right.lineage_id, right.sensor_id):
+            left_source = left.source_id or left.lineage_id
+            right_source = right.source_id or right.lineage_id
+            if (left_source, left.sensor_id) != (right_source, right.sensor_id):
                 break
             if right.start_index >= left.end_index:
                 break
             if partitions[left.episode_id] is not partitions[right.episode_id]:
                 raise ValueError(
-                    f"overlapping raw intervals cross partitions within lineage {left.lineage_id}"
+                    f"overlapping raw intervals cross partitions for source {left_source}"
                 )
 
 
@@ -140,9 +154,16 @@ def extend_assignments_by_lineage(
 ) -> tuple[SplitAssignment, ...]:
     """Place replay/paired descendants in the partition of their lineage."""
 
-    lineage_partition = {item.lineage_id: item.partition for item in assignments}
+    lineage_partition: dict[str, DatasetPartition] = {}
+    existing_ids = {item.episode_id for item in assignments}
+    for item in assignments:
+        previous = lineage_partition.setdefault(item.lineage_id, item.partition)
+        if previous is not item.partition:
+            raise ValueError(f"parent lineage crosses partitions: {item.lineage_id}")
     extended = list(assignments)
     for episode_id, lineage_id in sorted(derived_episode_lineages.items()):
+        if episode_id in existing_ids:
+            raise ValueError(f"derived episode already has an assignment: {episode_id}")
         try:
             partition = lineage_partition[lineage_id]
         except KeyError as exc:
@@ -154,4 +175,5 @@ def extend_assignments_by_lineage(
                 partition=partition,
             )
         )
+        existing_ids.add(episode_id)
     return tuple(extended)
