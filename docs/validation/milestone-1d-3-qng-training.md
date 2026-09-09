@@ -4,8 +4,9 @@
 
 This record separates the approved 1D.3 protocol, the implemented software,
 the designated canonical TRAIN execution, and the corrective audit/identity
-evidence. It does not close Gate G4, select a model, open TEST, use VALIDATION
-labels, or authorize Milestone 1D.4.
+evidence. External scientific review subsequently closed Gate G4 at commit
+`1b4435b2699066211aa2e9bb8e9cd8cd0b8af82b`. The record itself does not select
+a model, open TEST, or authorize work beyond the separately approved 1D.4a.
 
 Entry branch was `codex/milestone-1d-tqk-training`; the approved entry HEAD was
 `ab5bff99fa9779a143e236595c0d4c1e78ff349f`. The working tree was clean and

@@ -9,11 +9,10 @@ immutable candidate-theta trajectory outside Git; it is not a promoted model,
 an active workbench checkpoint, held-out evaluation, or evidence of quantum
 advantage.
 
-The increment and its corrective audit/identity consolidation are implemented
-on `codex/milestone-1d-tqk-training` and await final external G4 review. Gate
-G4 is not declared closed by this document. Milestone 1D.4, validation-based
-model selection, TEST opening, AFSE, neural processing, physical-QPU work and
-GUI integration remain blocked.
+The increment and its corrective audit/identity consolidation were approved on
+`codex/milestone-1d-tqk-training`; external review closed Gate G4 at commit
+`1b4435b2699066211aa2e9bb8e9cd8cd0b8af82b`. This document does not authorize
+TEST opening, AFSE, neural processing, physical-QPU work or GUI integration.
 
 ## Frozen scientific inputs
 

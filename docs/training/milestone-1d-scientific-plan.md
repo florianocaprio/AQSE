@@ -4,12 +4,13 @@
 
 | Field | Value |
 | --- | --- |
-| Status | **1D.1 frozen; 1D.2 approved/G3 closed; 1D.3 implemented and awaiting review** |
+| Status | **1D.1/1D.2 frozen; G4 closed; 1D.4a implemented and awaiting G5 review** |
 | Date | 2026-09-09 |
 | Working branch | `codex/milestone-1d-tqk-training` |
 | 1D.3 approved entry HEAD | `ab5bff99fa9779a143e236595c0d4c1e78ff349f` |
+| 1D.4a approved entry HEAD | `1b4435b2699066211aa2e9bb8e9cd8cd0b8af82b` |
 | Milestone 1C tag | `milestone-1c` → `95c5483c0192ba7605713c428e02b2527ab1f919` |
-| Active/promoted model through 1D.3 | None |
+| Active/promoted model through 1D.4a | None |
 
 The master prompt named `95c5483` as both the tag and `main` baseline. Before
 this work, the approved infrastructure-health patch had intentionally advanced
@@ -19,9 +20,9 @@ and retains that patch. No history or tag was rewritten.
 
 This document records the approved 1D.0 decisions. Separate validation records
 document the approved 1D.1 dataset freeze, the approved offline 1D.2 encoder,
-and the bounded TRAIN-only 1D.3 candidate-theta run. None authorizes or claims
-held-out validation, an active/promoted model, AFSE mathematics, a neural
-model, or continuous inference.
+the bounded TRAIN-only 1D.3 candidate-theta run, and the authorized
+TRAIN/VALIDATION 1D.4a comparison. TEST remains sealed; no active/promoted
+model, AFSE mathematics, neural model, or continuous inference is authorized.
 
 ## 1. Existing boundary and terminology
 
@@ -339,7 +340,7 @@ stored observations. There is no automatic promotion, warm start or browser
 temporary bounded payload, then rename it into the configured artifact root
 outside Git.
 
-## 7. Comparative validation plan
+## 7. Comparative validation plan and implemented 1D.4a freeze
 
 All methods use identical group partitions, observable information and frozen
 evaluation episodes:
@@ -368,6 +369,23 @@ reason when too few groups exist.
 
 Quantum superiority is not an acceptance condition. Negative, null and
 inconclusive results are retained.
+
+Milestone 1D.4a froze the finite budget before accessing VALIDATION labels:
+
+- matched seeds `1001005` through `1001009` as previously reserved;
+- RBF-SVC `C={0.1,1,10}`, `gamma={0.01,0.1,1}`;
+- precomputed-kernel SVC `C={0.1,1,10}`;
+- fixed-theta, ordinary-gradient and QNG checkpoints 0--10 for all five seeds;
+- 10 GD/QNG updates with the approved protected loss/gradient and unchanged
+  QNG contract;
+- primary VALIDATION balanced accuracy, secondary macro-F1, then earliest
+  checkpoint, lowest `C`, lowest `gamma` and lowest seed;
+- 2,000 stratified independent-lineage bootstrap resamples with seed `1001010`.
+
+The immutable protocol, evaluation and one-selection-per-method freeze are
+described in [the 1D.4a training contract](milestone-1d-4a-comparative-evaluation.md)
+and [validation record](../validation/milestone-1d-4a-comparative-evaluation.md).
+This closes no part of Gate G5 and does not authorize TEST access.
 
 ## 8. Acceptance matrix for later increments
 
@@ -409,7 +427,7 @@ backend/app/training/
   encoding.py            # implemented offline 1D.2 adapter; legacy unchanged
   runner.py              # implemented bounded wrapper around supplied fit_qng
   run_storage.py         # immutable candidate-run persistence and load-back
-  evaluation.py          # frozen comparisons and test-seal ledger
+  evaluation*.py         # implemented 1D.4a comparison, protocol and storage
   service.py             # implemented one-job orchestration outside event loop
 
 backend/app/api/training.py
@@ -428,8 +446,8 @@ semantics require a separate scientific decision.
 
 ## 10. Scientific decision status
 
-Items 1--9 below were approved through 1D.3. Items 10--12 remain future
-decisions and are not authorized by the bounded training increment:
+Items 1--9 were approved through 1D.3. Items 10--11 are now frozen by 1D.4a;
+item 12 remains a future external Gate G5 decision:
 
 1. the nominal/elevated device-noise task and the meaning of `-1/+1`;
 2. selected measured channel, episode duration, harmonic domain and training-only
@@ -443,9 +461,9 @@ decisions and are not authorized by the bounded training increment:
 8. theta initialization distribution and matched-seed policy;
 9. training/reference limits, update budget, timeout and cancellation semantics;
 10. comparator hyperparameter budgets, checkpoint selection metric and interval
-    method;
-11. whether the research-only precomputed-kernel SVC is approved solely as an
-    evaluator;
+    method — **frozen by protocol `aqse-comparative-protocol-a671952c35f0ffe8`**;
+11. the research-only precomputed-kernel SVC is approved solely as an evaluator
+    for this bounded comparison;
 12. the stage at which the sealed test partition may be opened.
 
 AFSE mathematics, output dimension and fitting policy remain separate future
@@ -468,5 +486,7 @@ Related project records:
 
 - [AQSE development roadmap](../roadmap/aqse-development-roadmap.md)
 - [Milestone 1D.0 design and compatibility audit](../validation/milestone-1d-design-audit.md)
+- [Milestone 1D.4a comparative evaluation](milestone-1d-4a-comparative-evaluation.md)
+- [Milestone 1D.4a validation record](../validation/milestone-1d-4a-comparative-evaluation.md)
 - [Milestone 1D.3 bounded QNG training](milestone-1d-3-qng-training.md)
 - [Milestone 1D.3 validation record](../validation/milestone-1d-3-qng-training.md)
