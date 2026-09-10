@@ -21,14 +21,14 @@ test: build
 	docker compose run --rm --no-deps frontend sh -c "CI=true pnpm install --frozen-lockfile && pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run build"
 
 prepare-demo: build
-	docker compose run --rm --no-deps backend python scripts/prepare_demo.py
+	docker compose run --rm --no-deps backend python -m scripts.prepare_demo
 
 # Starts saved artifacts only; preparation, training, and TEST access remain explicit.
 demo: build
 	docker compose up -d --wait --wait-timeout $${AQSE_DEMO_WAIT_SECONDS:-120}
 
 acceptance:
-	docker compose exec -T backend python scripts/demo_acceptance.py \
+	docker compose exec -T backend python -m scripts.demo_acceptance \
 		--base-url http://127.0.0.1:8000 \
 		--frontend-url http://frontend:3000 \
 		--timeout-s $${AQSE_ACCEPTANCE_TIMEOUT_SECONDS:-90} \
@@ -36,7 +36,7 @@ acceptance:
 
 # Ten real wall-clock minutes by default against the running observation worker.
 soak:
-	docker compose exec -T backend python scripts/demo_soak.py \
+	docker compose exec -T backend python -m scripts.demo_soak \
 		--base-url http://127.0.0.1:8000 \
 		--duration-s $${SOAK_DURATION_SECONDS:-600} \
 		--nodes $${SOAK_NODE_COUNT:-8} \

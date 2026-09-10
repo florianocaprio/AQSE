@@ -102,12 +102,12 @@ def test_operational_make_targets_use_explicit_preparation_and_live_services() -
     makefile = path.read_text(encoding="utf-8")
 
     assert "prepare-demo:" in makefile
-    assert "python scripts/prepare_demo.py" in makefile
+    assert "python -m scripts.prepare_demo" in makefile
     assert "demo:" in makefile
     assert "docker compose up -d --wait" in makefile
     assert "acceptance:" in makefile
-    assert "python scripts/demo_acceptance.py" in makefile
-    assert "python scripts/demo_soak.py" in makefile
+    assert "python -m scripts.demo_acceptance" in makefile
+    assert "python -m scripts.demo_soak" in makefile
     assert "SOAK_DURATION_SECONDS:-600" in makefile
 
 
