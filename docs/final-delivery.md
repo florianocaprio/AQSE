@@ -2,10 +2,10 @@
 
 ## Delivery status
 
-**Status at this documentation snapshot:** functional draft implemented in the
-working tree; canonical preparation and final operational acceptance are not
-declared complete until the measured fields below are populated from actual
-runs.
+**Status at this documentation snapshot:** the bounded end-to-end v1 research
+demonstrator is implemented, canonically prepared and operationally validated
+on the dedicated branch. Final manual acceptance and merge review remain with
+Floriano; no PR or merge is included.
 
 Scientific label: **research / not validated for field deployment**.
 
@@ -92,9 +92,13 @@ those operations automatically.
   evaluation;
 - no historical TEST reopening and no selection change after TEST.
 
-Actual artifact IDs, candidate choices, accepted steps, class supports,
-confusions, coverage and metrics are intentionally omitted here until
-`make prepare-demo` has completed and the artifacts have been verified.
+The verified canonical study is
+`aqse-network-study-5f33f5c4d856361f`, selection freeze
+`aqse-demo-freeze-39c61760d233f694` and final evaluation
+`aqse-demo-final-ad5fb1055eb68ead`. Local selection used the protected-QNG
+candidate after 10 accepted steps; network selection used theta0 under the
+predeclared tie rule. The detailed record contains the exact theta vectors,
+supports, confusions, intervals and artifact hashes.
 
 ## Operational behavior
 
@@ -121,24 +125,31 @@ candidate. `PENDING` is not a pass.
 
 | Verification | Result | Evidence |
 | --- | --- | --- |
-| `make build` | **PENDING FINAL RUN** | see validation record |
-| `make test` | **PENDING FINAL RUN** | backend/frontend counts pending |
-| `make prepare-demo` | **PENDING CANONICAL RUN** | artifact IDs/metrics pending |
-| `make demo` and Compose health | **PENDING FINAL RUN** | backend/frontend state pending |
-| `make acceptance` | **PENDING FINAL RUN** | API report pending |
-| Browser 1440×900 | **PENDING FINAL RUN** | screenshot/report path pending |
-| Browser 390×844 | **PENDING FINAL RUN** | screenshot/report path pending |
-| Eight-node 600 s soak | **PENDING FINAL RUN** | RSS/queue/latency report pending |
-| Protected hashes | **PENDING FINAL RECHECK** | expected values below |
-| Branch push/alignment | **PENDING FINAL PUSH** | local/remote SHA pending |
+| `make build` | PASS | native `linux/arm64` images |
+| `make test` | PASS | backend 369/369; Ruff; TypeScript; ESLint; frontend 47/47; Vite build |
+| `make prepare-demo` | PASS and idempotent rerun | canonical study/freeze/final IDs above; no TEST reopen on rerun |
+| `make demo` and Compose health | PASS | backend/frontend healthy; persisted active pair restored after restart |
+| `make acceptance` | PASS | 182 HTTP calls; N=1/2/4/8, events, abstention, replay, training and bundle controls |
+| Browser 1440×900 | PASS | live four-node observation and connected model output; all worksheets opened; clean console |
+| Browser 390×844 | PASS | all eight worksheets at 390 px after one responsive correction; clean console |
+| Eight-node 600 s soak | PASS for the bounded runtime invariants | 600.206 s; 588/0 complete/skipped windows; queue max 0; health 120/120; RSS growth disclosed |
+| Protected hashes | PASS | all five expected values below matched exactly |
+| Branch push/alignment | Deferred to post-commit delivery report | exact final SHA and 0/0 alignment are reported after push |
 
 ## Scientific interpretation and limits
 
 Functional completion and predictive performance are separate statements.
-The code can be a complete research demonstrator even when measured accuracy is
-weak or the AFSE model loses to the raw-feature MLP. The final record must say
-whether the quantum→AFSE path helped, tied or hurt; it must not start another
-seed/data/hyperparameter search after seeing TEST.
+The connected demonstrator is functional, but the quantum→AFSE path **hurt**
+both held-out TEST comparisons after helping on VALIDATION:
+
+- local TEST: BA 0.5833 and macro-F1 0.5897 versus raw 0.6875/0.6952;
+- network TEST: BA 0.7083 and macro-F1 0.7009 versus raw 0.7500/0.7565.
+
+Both paired delta intervals include zero. NORMAL recall was 0.25 local and
+0.3333 network, and the NORMAL replay false-positive episode rate was 1.0 for
+both tasks. These negative findings were preserved without another seed,
+threshold, model or hyperparameter search and without changing the frozen
+selection.
 
 The following limits remain regardless of measured scores:
 
@@ -156,7 +167,7 @@ The following limits remain regardless of measured scores:
   sensitivity or quantum advantage;
 - the study is small, simulated and evaluated at the independent-episode
   level; degenerate bootstrap intervals do not prove zero uncertainty;
-- the ten-minute local soak, when complete, demonstrates one machine/run only
+- the completed ten-minute local soak demonstrates one machine/run only
   and does not guarantee hard real-time behavior.
 
 ## Protected evidence
@@ -171,9 +182,8 @@ Expected byte-identical hashes:
 | original notebook | `9d7e0337af7c039894fc6c53567de2883063b32c89e368753bd01e1d9e9e82be` |
 | historical TEST ledger | `e0d4898141d8be07f4a4f1af7582791eae61994ced52bb7b3dba30a7ddda4b70` |
 
-These values are expectations until the final validation record states the
-actual recheck. `main`, tags and protected assets must not be changed by this
-delivery.
+All values matched on the final recheck. `main`, tags and protected assets were
+not changed by this delivery.
 
 ## Known implementation disclosure
 
@@ -185,7 +195,7 @@ fixture namespace are preserved in the detailed validation record.
 
 ## Final acceptance condition
 
-The delivery becomes ready for final manual acceptance and merge review only
-after all PENDING rows above have actual evidence, the branch is pushed with a
-clean working tree, local/remote HEAD match, and the final scientific result is
-reported without post-TEST tuning. No PR or merge is part of this delivery.
+The delivery is ready for final manual acceptance and merge review after the
+final evidence commit is pushed, the local/remote SHA equality and clean status
+are reported, and the negative scientific result above remains unchanged. No
+PR or merge is part of this delivery.

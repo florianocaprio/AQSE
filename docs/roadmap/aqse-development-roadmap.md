@@ -23,7 +23,9 @@ Repository context:
   `1cb07cdccabf9c655a63f2b23aab37383ae90b69`;
 - immutable peeled `milestone-1c` tag:
   `95c5483c0192ba7605713c428e02b2527ab1f919`;
-- last pushed completion SHA: **pending final validated push**.
+- last pushed implementation SHA before the final evidence commit:
+  `a680752c0d45032afcdd669dad9a38b5da6fa723`; the final self-referential SHA
+  is reported after push in the delivery response.
 
 ## Current completion snapshot
 
@@ -31,13 +33,13 @@ Repository context:
 | --- | --- | --- | --- |
 | Historical 1D | Preserve published 1D.1–1D.4b evidence; never reopen its TEST | Existing loaders/results retained | Historical results remain the published record |
 | State8 profiles | Add distinct local/network non-harmonic profiles | Implemented in the working branch | Component/integration evidence belongs in the end-to-end validation record |
-| New study | 160 independent episodes, fixed 96/32/32 split | Generator, typed archive and sealed ledger implemented | Canonical IDs and metrics pending/reported only after `make prepare-demo` |
-| Quantum training | Compare theta0 with at most 10 accepted protected-QNG updates | Protected wrappers and bounded fitting integrated | Selected candidates and actual steps pending canonical preparation |
-| AFSE | Fixed regularised Nyström map, up to 32 TRAIN landmarks | Fitted artifact and immutable query runtime implemented | Dimension/eigenspectrum/OOD observations pending canonical preparation |
-| Classical output | Standardised 32→16 tanh MLP, fixed LBFGS budget | sklearn fit plus safe numeric NumPy runtime implemented | Validation/TEST results pending canonical preparation |
-| Bundle registry | One compatible local/network pair, explicit application | Atomic persisted registry/application implemented | Restart/application acceptance pending final run |
-| Continuous analysis | Observation-only, causal, bounded newest-window scheduling | Worker and status/result API implemented | Eight-node cadence and 600 s soak pending final benchmark |
-| GUI | Retain and complete eight worksheets | Connected views and controls implemented in the working branch | Desktop/narrow browser acceptance pending final run |
+| New study | 160 independent episodes, fixed 96/32/32 split | Generator, typed archive and sealed ledger implemented | Canonical study `aqse-network-study-5f33f5c4d856361f`; TEST ledger closed at 3 events |
+| Quantum training | Compare theta0 with at most 10 accepted protected-QNG updates | Protected wrappers and bounded fitting integrated | Local selected protected QNG after 10 steps; network selected theta0 by tie rule |
+| AFSE | Fixed regularised Nyström map, up to 32 TRAIN landmarks | Fitted artifact and immutable query runtime implemented | Both selected maps are 32D/32 landmarks; 0 negative eigenvalues clipped |
+| Classical output | Standardised 32→16 tanh MLP, fixed LBFGS budget | sklearn fit plus safe numeric NumPy runtime implemented | NumPy agreement exact; AFSE helped VALIDATION but hurt both TEST comparisons |
+| Bundle registry | One compatible local/network pair, explicit application | Atomic persisted registry/application implemented | Idempotent apply, mismatch rejection and identical reload after Docker restart passed |
+| Continuous analysis | Observation-only, causal, bounded newest-window scheduling | Worker and status/result API implemented | 600.206 s at 8 nodes: 588/0 windows, queue max 0, health 120/120 |
+| GUI | Retain and complete eight worksheets | Connected views and controls implemented in the working branch | Real 1440×900 and 390×844 QA passed; all worksheets and live path exercised |
 
 “Implemented” above describes executable code, not scientific performance.
 Only [the validation record](../validation/end-to-end-demo.md) may declare an
@@ -176,33 +178,37 @@ Screenshots and reports remain outside Git.
 | Gate | Condition | Current state |
 | --- | --- | --- |
 | E2E-1 contract | design freeze recorded before canonical study evaluation | Recorded |
-| E2E-2 implementation | State8, study, AFSE, MLP, bundles, worker, APIs and GUI connected | Implemented in working branch; full regression pending |
-| E2E-3 scientific run | TRAIN fit, VALIDATION freeze, exactly one new TEST evaluation persisted | Pending/reported in validation record |
-| E2E-4 operational | services healthy, browser routes pass, persistence/replay/application verified | Pending/reported in validation record |
-| E2E-5 soak | eight nodes, 600 s real wall time, bounded queue/memory/latency report | Pending/reported in validation record |
-| E2E-6 review | branch pushed clean, local/remote aligned, external manual acceptance | Pending |
+| E2E-2 implementation | State8, study, AFSE, MLP, bundles, worker, APIs and GUI connected | Closed; backend 369/369, frontend 47/47, static checks/build pass |
+| E2E-3 scientific run | TRAIN fit, VALIDATION freeze, exactly one new TEST evaluation persisted | Closed; immutable canonical IDs and 3-event ledger recorded |
+| E2E-4 operational | services healthy, browser routes pass, persistence/replay/application verified | Closed for automated/local evidence; acceptance report passed and restart preserved active pair |
+| E2E-5 soak | eight nodes, 600 s real wall time, bounded queue/memory/latency report | Closed for this local observation; RSS growth and non-real-time scope disclosed |
+| E2E-6 review | branch pushed clean, local/remote aligned, external manual acceptance | Automated evidence complete; external manual acceptance/merge review remains |
 
 No gate requires the quantum/AFSE model to beat the classical baseline.
 Negative, tied or weak predictive results close the bounded experiment when
 reported honestly; they do not authorise an undeclared tuning loop.
 
-## Remaining acceptance work
+## Completed automated acceptance evidence
 
-The work is not a final release until the validation record contains actual
-evidence for:
+The detailed validation record now contains actual evidence for:
 
-- complete backend and frontend test/lint/typecheck/build suites;
-- protected-source hashes and historical TEST-ledger identity;
-- `make build`, `make prepare-demo`, `make demo`, `make acceptance`;
-- service health and representative REST operations;
-- classification metrics, supports, confusion, coverage and uncertainty for
-  the one frozen new-study evaluation;
-- 1/2/4/8-node live scenarios, quality abstentions, explicit events,
-  training/cancellation/idempotency and atomic application;
-- backend/frontend restart with saved-bundle reload;
-- desktop and narrow browser screenshots;
-- 600 s real-wall-clock soak with RSS, queue, skip and latency observations;
-- `git diff --check`, clean final status and local/remote SHA equality.
+- complete backend/frontend test, lint, typecheck and production build suites;
+- protected-source hashes and opaque historical TEST-ledger identity;
+- `make build`, canonical/idempotent `make prepare-demo`, `make demo`,
+  `make acceptance` and `make soak`;
+- frozen classification metrics, supports, confusions, coverage, uncertainty
+  and paired raw-baseline comparisons;
+- 1/2/4/8-node operation, controlled perturbations, quality abstention,
+  training cancellation/idempotency and atomic compatible application;
+- deterministic replay/stale-generation rejection and saved-bundle reload
+  after a fresh backend/frontend restart;
+- meaningful desktop and narrow browser screenshots outside Git;
+- a 600 s real-wall-clock eight-node report with RSS, queue, skips, health and
+  latency observations;
+- final whitespace, tracked-file, ref/hash and local/remote checks.
+
+Only Floriano's manual acceptance and any separately authorised merge review
+remain. The negative TEST comparison does not reopen selection or tuning.
 
 ## Compatibility and scientific protection
 

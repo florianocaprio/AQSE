@@ -1,5 +1,9 @@
 # Documentazione AQSE
 
+- `roadmap/aqse-development-roadmap.md`: roadmap canonica, gate e stato misurato del dimostratore end-to-end.
+- `user-guide.md`: percorso operativo dalla preparazione alla sessione live e alla revisione degli esperimenti.
+- `final-delivery.md`: hand-off sintetico, risultati scientifici e limiti dichiarati.
+- `validation/end-to-end-demo.md`: record dettagliato di run canonica, test, API/browser acceptance, restart e soak.
 - `architecture/canonical-aqse-pipeline.md`: pipeline canonica, confini di inferenza e training.
 - `architecture/scientific-workbench.md`: stato condiviso e semantica delle worksheet.
 - `architecture/scientific-scope-and-limitations.md`: assunzioni, limiti e claim esclusi.

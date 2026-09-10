@@ -224,26 +224,45 @@ the final delivery suite has passed.
 
 ## Canonical study and model results
 
-No value may be inserted into this section until it is read from verified
-canonical artifacts produced by `make prepare-demo`.
+The values below were read from the verified immutable artifacts produced by
+`make prepare-demo`. Re-running that command reused the same study, freeze and
+final evaluation and did not reopen TEST.
 
 | Field | Actual result |
 | --- | --- |
-| Study artifact ID | **PENDING CANONICAL RUN** |
-| Study content digest | **PENDING CANONICAL RUN** |
-| Selection freeze ID | **PENDING CANONICAL RUN** |
-| Final evaluation ID | **PENDING CANONICAL RUN** |
-| New TEST ledger final SHA/count | **PENDING CANONICAL RUN** |
-| Selected local bundle/theta/accepted QNG steps | **PENDING CANONICAL RUN** |
-| Selected network bundle/theta/accepted QNG steps | **PENDING CANONICAL RUN** |
-| Local AFSE M/dimension/eigenvalue notes | **PENDING CANONICAL RUN** |
-| Network AFSE M/dimension/eigenvalue notes | **PENDING CANONICAL RUN** |
-| MLP convergence warnings | **PENDING CANONICAL RUN** |
-| Local VALIDATION and TEST metrics/support/confusion | **PENDING CANONICAL RUN** |
-| Network VALIDATION and TEST metrics/support/confusion | **PENDING CANONICAL RUN** |
-| Raw baseline comparisons | **PENDING CANONICAL RUN** |
-| Quantum→AFSE helped/tied/hurt | **PENDING CANONICAL RUN** |
-| Bootstrap degeneracy/uncertainty notes | **PENDING CANONICAL RUN** |
+| Study artifact ID | `aqse-network-study-5f33f5c4d856361f` |
+| Study content digest | `5f33f5c4d856361fd94f3c2bc93867f8dee84b1f088450457f3bbee4bdc00c12` |
+| Selection freeze ID | `aqse-demo-freeze-39c61760d233f694` |
+| Final evaluation ID | `aqse-demo-final-ad5fb1055eb68ead` |
+| New TEST ledger final SHA/count | `c4431d837d9a486625d0c7bf3cd7117952c0c333dc08e80ee66921e8e5d45f6d`; exactly 3 events (`sealed`, observations open, labels/final open) |
+| Selected local bundle/theta/accepted QNG steps | `aqse-demo-bundle-06a2399a1c4c853b`; `protected_qng`; 10 accepted updates, `MAX_UPDATES_REACHED`; alignment loss 0.855553 → 0.728577 |
+| Selected network bundle/theta/accepted QNG steps | `aqse-demo-bundle-cd888ecfb28b2145`; deterministic `theta0`; 0 updates; selected by the predeclared theta0 tie rule |
+| Local AFSE M/dimension/eigenvalue notes | 32/32; λ=1e-6; minimum Gram eigenvalue 0.0002263613; 0 negative eigenvalues clipped; TRAIN residual p99 0.5582050 |
+| Network AFSE M/dimension/eigenvalue notes | 32/32; λ=1e-6; minimum Gram eigenvalue 0.0003971019; 0 negative eigenvalues clipped; TRAIN residual p99 0.7522633 |
+| MLP convergence warnings | None; local/network iterations 60/47; terminal loss 0.0011908/0.0013336; fitted-sklearn versus persisted-NumPy maximum score error 0 |
+| Local VALIDATION | n=32, support CHANGE/NORMAL 24/8; BA 0.8750 [0.7270, 0.9808], macro-F1 0.8454 [0.6744, 0.9646], coverage 0.9688; operational confusion columns CHANGE/NORMAL/ABSTAIN, matrix `[[20,3,1],[1,7,0]]` |
+| Local TEST | n=32, support CHANGE/NORMAL 24/8; BA 0.5833 [0.4399, 0.7708], macro-F1 0.5897 [0.4074, 0.7949], coverage 1.0; recall CHANGE 0.9167, NORMAL 0.2500; confusion `[[22,2,0],[6,2,0]]` |
+| Network VALIDATION | n=24, support 6/class; BA 0.9167 [0.8125, 1.0], macro-F1 0.9143 [0.7474, 1.0], coverage 0.9167; 2 heuristic-OOD abstentions |
+| Network TEST | n=24, support 6/class; BA 0.7083 [0.5238, 0.8667], macro-F1 0.7009 [0.5051, 0.8509], coverage 0.9167; 2 uncertain; recall DEVICE/ENV/MIXED/NORMAL 0.8333/0.6667/1.0/0.3333; confusion columns DEVICE/ENV/MIXED/NORMAL/ABSTAIN, matrix `[[5,0,0,0,1],[0,4,0,2,0],[0,0,6,0,0],[0,4,0,1,1]]` |
+| Raw baseline comparisons | Local TEST raw BA/F1/coverage 0.6875/0.6952/0.9063; network TEST raw 0.7500/0.7565/1.0 |
+| Quantum→AFSE helped/tied/hurt | HELPED on VALIDATION for both tasks; HURT on TEST for both. Local TEST ΔBA -0.1042 [-0.2815, 0.0400], ΔF1 -0.1055 [-0.2912, 0.0589]. Network TEST ΔBA -0.0417 [-0.2750, 0.1609], ΔF1 -0.0556 [-0.2875, 0.1476] |
+| Bootstrap/operational notes | 1,000 independent-episode replicates, no degenerate interval. Delta intervals include zero. NORMAL false-positive episode rate was 1.0 for both tasks; false-positive window rates were 0.4191 local and 0.3725 network |
+
+The exact selected local theta vector is
+`[-1.1322515836500304, 0.6049354826834435, -0.17738183188246315,
+-0.7108717370199786, 0.12715886642685476, 0.6100628185718163,
+-0.6325535184119011, -0.09283882026917967, -1.1669023233007738,
+0.4866923756318499, -0.33534032294628247, 0.19642307714943072,
+0.22669815086146883, 0.25001886893741027, 0.23555479904484355,
+-0.7185928531479768]`.
+
+The exact selected network theta0 vector is
+`[0.03091583171290202, 0.6435929483820464, -0.30386974524518817,
+-0.2064912691813241, 0.1248217931497525, 0.6653650667371245,
+-0.22168729538374543, -0.0928388202692696, -0.4282288977232318,
+0.4436856931191977, -0.34695130722395184, 0.34124211469903654,
+0.23278896361304602, 0.21787369401425893, 0.2785735202085471,
+-0.7185928531479769]`.
 
 TEST results must remain unchanged even if unfavorable. No additional study,
 seed, model threshold or hyperparameter search is authorised by a negative
@@ -255,15 +274,15 @@ Record the exact final command, exit status, count and material warning.
 
 | Check | Exact command | Result |
 | --- | --- | --- |
-| Container build | `make build` | **PENDING FINAL RUN** |
-| Backend pytest | via `make test` | **PENDING FINAL RUN** |
-| Protected original quantum tests | via backend suite | **PENDING FINAL RUN** |
-| Ruff | via `make test` | **PENDING FINAL RUN** |
-| Frontend TypeScript | via `make test` | **PENDING FINAL RUN** |
-| Frontend ESLint | via `make test` | **PENDING FINAL RUN** |
-| Frontend Vitest | via `make test` | **PENDING FINAL RUN** |
-| Vite production build | via `make test` | **PENDING FINAL RUN** |
-| Diff whitespace | `git diff --check` | **PENDING FINAL RUN** |
+| Container build | `make build` (also run by `make demo` and `make test`) | PASS; native `linux/arm64` backend and frontend images |
+| Backend pytest | via `make test` | PASS; 369/369 in 75.49 s, one external Starlette/AnyIO deprecation warning |
+| Protected original quantum tests | via backend suite | PASS; 8/8 |
+| Ruff | via `make test` | PASS; all checks passed |
+| Frontend TypeScript | via `make test` | PASS |
+| Frontend ESLint | via `make test` | PASS, zero warnings allowed |
+| Frontend Vitest | via `make test` | PASS; 47/47 across 14 files |
+| Vite production build | via `make test` | PASS; 654 modules; non-blocking 794.58 kB chunk warning |
+| Diff whitespace | `git diff --check` | PASS in final pre-commit validation |
 
 ## API and browser acceptance
 
@@ -272,30 +291,36 @@ artifact root. The final run must cover:
 
 | Scenario | Result/evidence |
 | --- | --- |
-| backend/frontend/lightweight quantum health | **PENDING** |
-| prepared registry and active compatible pair | **PENDING** |
-| N=1 local-only acquisition/inference | **PENDING** |
-| N=2 attribution-ambiguous acquisition/inference | **PENDING** |
-| N=4 connected network acquisition/inference | **PENDING** |
-| N=8 connected network acquisition/inference | **PENDING** |
-| common environmental event | **PENDING** |
-| focal S3 drift/noise | **PENDING** |
-| moving/local spatial source | **PENDING** |
-| shared offset and mixed/ambiguous condition | **PENDING** |
-| dropout, clipping and stuck abstention/flags | **PENDING** |
-| training start/cancel/duplicate intent and health responsiveness | **PENDING** |
-| explicit atomic bundle application | **PENDING** |
-| mismatched bundle rejection | **PENDING** |
-| reset/replay reproducibility and stale-response protection | **PENDING** |
-| restart and saved-bundle reload without auto-training | **PENDING** |
+| backend/frontend/lightweight quantum health | PASS; backend 8.608 ms, quantum 1.059 ms with NumPy reference not executed, frontend HTTP 200 in 2.931 ms |
+| prepared registry and active compatible pair | PASS; canonical study/freeze/final plus stable application `aqse-demo-application-9bfb1b5789fbfefd` |
+| N=1 local-only acquisition/inference | PASS; 1 result, `CHANGE_DETECTED`, p50/p95 10.53 ms, no skipped window |
+| N=2 attribution-ambiguous acquisition/inference | PASS; 2 results (`CHANGE_DETECTED`, `NORMAL`), p50/p95 45.47 ms, no fabricated peer attribution |
+| N=4 connected network acquisition/inference | PASS; 4 results (`NORMAL` + 3 `ENVIRONMENT_COMPATIBLE`), 40.43 ms, no skipped window |
+| N=8 connected network acquisition/inference | PASS; 8 results (6 `NORMAL`, 1 `ENVIRONMENT_COMPATIBLE`, 1 `ABSTAIN`), 116.45 ms, no skipped window |
+| common environmental event | PASS; one scheduled control, maximum absolute feature delta 49.128; changed features on S1–S4 |
+| focal S3 drift/noise | PASS; two controls, maximum feature delta 19.235; focal/peer outputs remain observation-derived |
+| moving/local spatial source | PASS; maximum feature delta 9.202 and spatially distinct S1–S4 response |
+| shared offset and mixed/ambiguous condition | PASS; shared offset delta 43.304 and mixed case delta 40.226; displayed rule remained `MIXED_OBSERVABLE_CHANGE`, not physical-cause truth |
+| dropout, clipping and stuck abstention/flags | PASS; S1 dropout, S2 stuck and S3 clipping each produced `ABSTAIN` with 3 valid peers; quality abstention count 3 |
+| training start/cancel/duplicate intent and health responsiveness | PASS; initial 201, idempotent retry 200 with same job; 26 sensor frames advanced; health 0.679 ms; terminal state `cancelled`; no auto-apply |
+| explicit atomic bundle application | PASS; identical retry retained the same application ID and compatible freeze |
+| mismatched bundle rejection | PASS; HTTP 409 with actionable immutable-freeze mismatch message |
+| reset/replay reproducibility and stale-response protection | PASS; 3,200 frames replayed with identical features/predictions; worker epoch 1→2; stale generation rejected |
+| restart and saved-bundle reload without auto-training | PASS; external `make down && make demo` restored the identical application/freeze/local/network IDs; GUI registry showed both bundles active |
+
+Automated acceptance report:
+`/Users/florianocaprio/Projects/AQSE-artifacts/validation/demo-acceptance-20260910T003452486787Z.json`
+(SHA-256 `63354dda37739c43f75a5c064d73e20afd997d30e5fa5f915efd318e423e02cd`).
+It records `PASSED`, 182 HTTP calls in 12.114 s, an observation-only
+prediction boundary and no simulator-truth endpoint call.
 
 Browser acceptance must use the real app at both viewports and preserve
 meaningful screenshots outside Git:
 
 | Viewport | Result | Screenshot/report |
 | --- | --- | --- |
-| 1440×900 | **PENDING** | **PENDING** |
-| 390×844 | **PENDING** | **PENDING** |
+| 1440×900 | PASS; session created/started, SSE connected, live State8 and network MLP output observed; all eight worksheets opened; console had no error/warning | `/Users/florianocaprio/.codex/visualizations/2026/09/08/01a08119-b668-78d0-9f58-ee7b276db53b/aqse-e2e/overview-live-desktop-1440x900.jpg` (SHA-256 `12fe4983e4f4cc8d24f33cd113cf0e622a7fde461300bf433d2172113fd73254`) |
+| 390×844 | PASS after correcting a discovered Sensors overflow; every worksheet measured `scrollWidth=clientWidth=390`, navigation/key controls usable, console clean | `/Users/florianocaprio/.codex/visualizations/2026/09/08/01a08119-b668-78d0-9f58-ee7b276db53b/aqse-e2e/overview-live-mobile-390x844.jpg` and `sensors-live-mobile-390x844-fixed.jpg` (SHA-256 `e2a0d9e3931f1cfa5d8a0db792ca3dd9011b9c2e97f22d7f95ca6df9de18e5c3`, `54c3278904caad37a756765fb0b2ede867495a80cc051c3b8d32aa65b0d95d62`) |
 
 ## Eight-node real-wall-clock soak
 
@@ -304,16 +329,16 @@ simulator time does not reduce the required wall time.
 
 | Measure | Actual result |
 | --- | --- |
-| Environment / host | **PENDING** |
-| Wall duration | **PENDING** |
-| Node count / sampling / hop | **PENDING** |
-| Backend/frontend health throughout | **PENDING** |
-| Analysis windows completed/skipped | **PENDING** |
-| Maximum queue depth/buffer behavior | **PENDING** |
-| Analysis processing p50/p95 | **PENDING** |
-| Result-age observations | **PENDING** |
-| RSS start/end/peak/trend | **PENDING** |
-| Report path | **PENDING** |
+| Environment / host | Darwin 25.6.0 arm64; Docker 29.5.3 `linux/aarch64`; both images native `linux/arm64` |
+| Wall duration | requested 600.0 s; measured 600.2057 s |
+| Node count / sampling / hop | 8 / 100 Hz / 1 s analysis hop, real time scale 1.0 |
+| Backend/frontend health | Backend 120/120 polls, 0 failures, p95 6.376 ms, max 24.978 ms; both Compose services healthy before and after. Frontend was not polled continuously by the soak script |
+| Analysis windows completed/skipped | 588 / 0; 0 quality abstentions in this run |
+| Maximum queue depth/buffer behavior | newest-window queue max 0; sensor buffer bounded at 12,000/12,000; 48,001 old frames overwritten after 60,001 generated |
+| Analysis processing p50/p95 | 60.988 / 83.059 ms |
+| Result-age observations | final sampled result age 927.618 ms |
+| RSS start/end/peak/trend | 793,260,032 / 1,121,890,304 / 1,121,890,304 bytes; +328,630,272 bytes; ten-minute OLS slope 1,664,194,151.6 bytes/hour. This warm-up/cache-inclusive observation is a limitation, not a leak diagnosis or forecast |
+| Report path | `/Users/florianocaprio/Projects/AQSE-artifacts/validation/demo-soak-20260910T005948702591Z.json`; SHA-256 `5271d0c2b3197d0f4233383f58ee2da14de97a562ba0185b350f5a65602b9d1a` |
 
 The final interpretation must be “measured on this local run”, not a hard
 real-time or general stability guarantee.
@@ -324,32 +349,57 @@ Expected hashes to remeasure at the end:
 
 | Asset | Expected SHA-256 | Actual |
 | --- | --- | --- |
-| `tqk8.py` | `cef11f0d0617e5e12b2904c0aa65868ef655a853db48a99c73a803440d371689` | **PENDING** |
-| `sampler_qng.py` | `7489c5c2b3eb0783499c333dc0826994b146d7cf5631469a0520bac9570b2ea6` | **PENDING** |
-| original TQK8 test | `c87c56c0eb3f1ea20d2dd124427aea96f868ae4674b5b390e2688e9da8bb0c09` | **PENDING** |
-| original notebook | `9d7e0337af7c039894fc6c53567de2883063b32c89e368753bd01e1d9e9e82be` | **PENDING** |
-| historical TEST ledger | `e0d4898141d8be07f4a4f1af7582791eae61994ced52bb7b3dba30a7ddda4b70` | **PENDING** |
+| `tqk8.py` | `cef11f0d0617e5e12b2904c0aa65868ef655a853db48a99c73a803440d371689` | exact match |
+| `sampler_qng.py` | `7489c5c2b3eb0783499c333dc0826994b146d7cf5631469a0520bac9570b2ea6` | exact match |
+| original TQK8 test | `c87c56c0eb3f1ea20d2dd124427aea96f868ae4674b5b390e2688e9da8bb0c09` | exact match |
+| original notebook | `9d7e0337af7c039894fc6c53567de2883063b32c89e368753bd01e1d9e9e82be` | exact match |
+| historical TEST ledger | `e0d4898141d8be07f4a4f1af7582791eae61994ced52bb7b3dba30a7ddda4b70` | exact opaque match; no semantic read |
 
 Final repository checks:
 
 | Check | Actual |
 | --- | --- |
 | branch | `codex/milestone-1d-tqk-training` |
-| final local SHA | **PENDING FINAL COMMIT** |
-| remote SHA/divergence | **PENDING FINAL PUSH** |
-| `main` unchanged | **PENDING FINAL RECHECK** |
-| `milestone-1c` tag unchanged | **PENDING FINAL RECHECK** |
-| secrets/runtime/build/ZIP files excluded | **PENDING FINAL RECHECK** |
-| final `git status` clean | **PENDING FINAL RECHECK** |
+| validated implementation SHA before this evidence commit | `a680752c0d45032afcdd669dad9a38b5da6fa723` |
+| final local/remote SHA | Reported after the evidence commit and push; a commit cannot contain its own SHA |
+| `main` unchanged | PASS; local and origin remain `1cb07cdccabf9c655a63f2b23aab37383ae90b69` |
+| `milestone-1c` tag unchanged | PASS; peeled tag remains `95c5483c0192ba7605713c428e02b2527ab1f919` |
+| secrets/runtime/build/ZIP files excluded | PASS in the final tracked/staged-file audit; artifacts and screenshots are outside Git |
+| final `git status` clean | Verified and reported after the final push |
+
+## Known warnings and corrected incidents
+
+- The first preparation invocation used a script path that could not import
+  `app`; it failed before creating a study or ledger event. The Make target now
+  runs the module form, and both the canonical run and idempotent rerun passed.
+- The first acceptance attempt received HTTP 403 from Vite for the internal
+  Compose hostname. Vite now allowlists only the `frontend` service alias;
+  acceptance then passed.
+- Browser QA exposed a 490 px Sensors document width at a 390 px viewport.
+  The descriptive-analysis grid now stacks below 560 px; all eight worksheet
+  widths remeasured at exactly 390 px.
+- Pytest emits one Starlette use of a deprecated AnyIO alias. Vite emits one
+  non-blocking 794.58 kB chunk-size warning.
+- A crash after fail-closed TEST-ledger advancement but before final artifact
+  persistence would require manual recovery and must never trigger an
+  automatic TEST retry.
+- The ten-minute RSS observation grew by 328.6 MB. It remains a documented
+  signal for longer profiling, not proof of a leak and not grounds for a
+  post-TEST model change.
 
 ## Scientific conclusion
 
-Two separate conclusions must be written after the measured sections exist:
+1. **Functional research demonstrator:** complete for the bounded local v1
+   scope. The real observation-only path, explicit training/cancellation,
+   atomic bundle application, replay, restart, desktop/mobile GUI and 600 s
+   eight-node run were exercised. This is not field-deployment validation or a
+   hard real-time guarantee.
+2. **Predictive performance / quantum benefit:** the frozen quantum→AFSE model
+   helped both tasks on VALIDATION but hurt both on the single held-out TEST
+   comparison. NORMAL recall and replay false positives are material limits.
+   Delta intervals include zero, the study is small and simulated, and no
+   quantum advantage is demonstrated. No tuning, selection change, refit or
+   additional TEST access followed these results.
 
-1. **Functional research demonstrator:** pending final connected-path,
-   browser, restart and soak evidence.
-2. **Predictive performance / quantum benefit:** pending the frozen canonical
-   VALIDATION/TEST artifacts; no direction is assumed in advance.
-
-Until then, the correct delivery statement is: **working end-to-end draft under
-final validation**, not final scientific acceptance.
+The branch is ready for Floriano's final manual acceptance and merge review;
+no pull request or merge is part of this delivery.

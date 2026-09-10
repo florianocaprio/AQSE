@@ -2876,6 +2876,11 @@ textarea:focus-visible,
 }
 
 @media (max-width: 560px) {
+  .analysis-controls {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
   .overview-status-grid,
   .health-strip,
   .provider-strip,
