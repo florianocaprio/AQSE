@@ -1,6 +1,7 @@
 import { CapabilityBadge } from "../components/CapabilityBadge";
 import {
   DemoMetricSummaryTable,
+  DemoModelComparisonSummary,
   activeBundleForTask,
   bundleForResult,
   compactId,
@@ -32,7 +33,7 @@ export function NeuralWorksheet() {
         index="07"
         eyebrow="FITTED CLASSICAL OUTPUT"
         title="Neural Model"
-        description="Inspect the fitted classical model downstream of AFSE, its uncalibrated class scores, conditional diagnosis, quality/context gates, and same-feature raw baseline."
+        description="Inspect three separate outputs: the fitted MLP downstream of quantum-AFSE, the same-architecture raw State8 MLP baseline, and a non-causal observable engineering rule."
         actions={<CapabilityBadge status={bundle ? "implemented" : workbenchState.capabilities?.neural_model.status ?? "not_implemented"} />}
       />
 
@@ -56,7 +57,7 @@ export function NeuralWorksheet() {
 
         <article className="workbench-panel model-output-card" aria-live="polite">
           <div className="panel-heading-row">
-            <div><p className="panel-kicker">CONDITIONAL DIAGNOSIS</p><h2>{result?.displayed_class ?? "No prediction"}</h2></div>
+            <div><p className="panel-kicker">AFSE → MLP CONDITIONAL DIAGNOSIS</p><h2>{result?.displayed_class ?? "No prediction"}</h2></div>
             {result && <span className={result.uncertain || !result.feature_valid ? "result-badge stale" : "result-badge"}>{result.uncertain ? "UNCERTAIN" : result.feature_valid ? "SCORED" : "ABSTAIN"}</span>}
           </div>
           <dl className="quality-grid">
@@ -64,14 +65,15 @@ export function NeuralWorksheet() {
             <div><dt>Top model score</dt><dd>{formatDemoNumber(result?.top_score ?? null)}</dd></div>
             <div><dt>Top-two margin</dt><dd>{formatDemoNumber(result?.top_two_margin ?? null)}</dd></div>
             <div><dt>Context mode</dt><dd>{result?.context_mode.replaceAll("_", " ") ?? "—"}</dd></div>
-            <div><dt>Raw baseline class</dt><dd>{result?.raw_baseline_class ?? "—"}</dd></div>
+            <div><dt>Raw State8 MLP class</dt><dd>{result?.raw_baseline_class ?? "—"}</dd></div>
+            <div><dt>Observable rule</dt><dd>{formatObservableRuleStatus(result?.observable_rule_status ?? null)}</dd></div>
             <div><dt>Heuristic OOD</dt><dd>{result?.heuristic_ood === null || !result ? "—" : result.heuristic_ood ? "flagged" : "not flagged"}</dd></div>
           </dl>
           <p className="boundary-note">{result?.attribution_note ?? "No conditional attribution is available until a real analyzed window is returned."}</p>
         </article>
 
         <article className="workbench-panel span-two">
-          <div className="panel-heading-row"><div><p className="panel-kicker">LIVE CLASS SCORE COMPARISON</p><h2>Quantum → AFSE model versus raw-feature baseline</h2></div>{result && <span className="chart-unit">model scores · not calibrated probabilities</span>}</div>
+          <div className="panel-heading-row"><div><p className="panel-kicker">LIVE MLP SCORE COMPARISON</p><h2>Quantum → AFSE → MLP versus raw State8 → MLP</h2></div>{result && <span className="chart-unit">model scores · not calibrated probabilities</span>}</div>
           {result?.class_scores ? (
             <div className="table-scroll">
               <table className="data-table score-table">
@@ -98,6 +100,16 @@ export function NeuralWorksheet() {
           )}
         </article>
 
+        <article className="workbench-panel span-two">
+          <div className="panel-heading-row">
+            <div><p className="panel-kicker">OBSERVABLE ENGINEERING RULE · SEPARATE CHANNEL</p><h2>{formatObservableRuleStatus(result?.observable_rule_status ?? null)}</h2></div>
+            <span className="result-badge stale">NON-CAUSAL</span>
+          </div>
+          <p className="boundary-note">
+            This TRAIN-fitted threshold rule reports observable common change and spatial disagreement only. It is neither an MLP prediction nor evidence of an environmental or device cause.
+          </p>
+        </article>
+
         {bundle && (
           <>
             <article className="workbench-panel">
@@ -105,14 +117,23 @@ export function NeuralWorksheet() {
               <DemoMetricSummaryTable metrics={bundle.validation} label="AFSE model validation metrics" />
             </article>
             <article className="workbench-panel">
-              <div className="panel-heading-row"><div><p className="panel-kicker">RAW BASELINE VALIDATION</p><h2>Same State8 features</h2></div></div>
+              <div className="panel-heading-row"><div><p className="panel-kicker">RAW MLP BASELINE VALIDATION</p><h2>Same architecture · State8 input</h2></div></div>
               <DemoMetricSummaryTable metrics={bundle.raw_baseline_validation} label="Raw baseline validation metrics" />
+            </article>
+            <article className="workbench-panel span-two">
+              <DemoModelComparisonSummary comparison={bundle.validation_comparison} label="AFSE and raw State8 validation comparison" />
             </article>
           </>
         )}
       </div>
     </section>
   );
+}
+
+export function formatObservableRuleStatus(
+  status: import("../types/demo").ObservableRuleStatus | null,
+): string {
+  return status ? status.replaceAll("_", " ") : "No observable-rule result";
 }
 
 function ScoreBar({ value }: { value: number | null }) {

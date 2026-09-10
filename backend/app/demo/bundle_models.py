@@ -11,6 +11,13 @@ from pydantic import Field, model_validator
 from app.classical.mlp import NumpyMLPClassifier
 from app.classical.mlp import query_context_for as mlp_context_for
 from app.classical.models import MLPClassifierArtifact, MLPScoreBatch
+from app.classical.observable_rule import (
+    ObservableRule,
+    ObservableRuleArtifact,
+    ObservableRuleStatus,
+    observable_rule_query,
+    validate_observable_rule_artifact,
+)
 from app.embeddings.nystrom import (
     NystromAFSE,
     NystromAFSEArtifact,
@@ -67,6 +74,9 @@ class DemoTaskExample(FrozenModel):
     feature_values: FeatureValues
     eligible: bool
     quality_flags: tuple[str, ...] = ()
+    replay_feature_values: tuple[FeatureValues, ...] = ()
+    replay_window_end_s: tuple[float, ...] = ()
+    event_start_s: float | None = None
 
     @model_validator(mode="after")
     def validate_feature_availability(self) -> DemoTaskExample:
@@ -77,6 +87,26 @@ class DemoTaskExample(FrozenModel):
             raise ValueError("eligible task examples cannot carry quality flags")
         if not self.eligible and not self.quality_flags:
             raise ValueError("ineligible task examples must explain their quality failure")
+        if len(self.replay_feature_values) != len(self.replay_window_end_s):
+            raise ValueError("replay features and causal window times must align")
+        if self.replay_feature_values:
+            if len(self.replay_feature_values) != 17 or self.event_start_s is None:
+                raise ValueError("replay evidence requires 17 windows and an event onset")
+            if any(
+                any(value is None for value in row)
+                for row in self.replay_feature_values
+            ):
+                raise ValueError("canonical replay evidence cannot impute missing features")
+            if any(
+                right <= left
+                for left, right in zip(
+                    self.replay_window_end_s,
+                    self.replay_window_end_s[1:],
+                )
+            ):
+                raise ValueError("replay causal window times must be strictly increasing")
+        elif self.event_start_s is not None:
+            raise ValueError("event onset cannot be attached without replay evidence")
         return self
 
 
@@ -175,16 +205,96 @@ class BootstrapInterval(FrozenModel):
         return self
 
 
+class DemoNodeCountMetrics(FrozenModel):
+    node_count: int = Field(ge=1, le=8)
+    sample_count: int = Field(gt=0)
+    eligible_count: int = Field(ge=0)
+    class_support: dict[str, int]
+    class_recall: dict[str, float | None]
+    balanced_accuracy: float = Field(ge=0.0, le=1.0)
+    macro_f1: float = Field(ge=0.0, le=1.0)
+    coverage: float = Field(ge=0.0, le=1.0)
+    abstention_count: int = Field(ge=0)
+    uncertain_count: int = Field(ge=0)
+    heuristic_ood_count: int = Field(ge=0)
+
+
+class DemoReplayNodeCountMetrics(FrozenModel):
+    node_count: int = Field(ge=1, le=8)
+    episode_count: int = Field(gt=0)
+    normal_episode_count: int = Field(ge=0)
+    normal_window_count: int = Field(ge=0)
+    false_positive_episode_count: int = Field(ge=0)
+    false_positive_window_count: int = Field(ge=0)
+    changed_episode_count: int = Field(ge=0)
+    detected_episode_count: int = Field(ge=0)
+    censored_episode_count: int = Field(ge=0)
+    detection_delay_p50_s: float | None = Field(default=None, ge=0.0)
+    detection_delay_p95_s: float | None = Field(default=None, ge=0.0)
+
+
+class DemoReplayMetrics(FrozenModel):
+    trace_policy: Literal[
+        "17-causal-windows;normal-fp;first-post-onset-operational-change"
+    ] = "17-causal-windows;normal-fp;first-post-onset-operational-change"
+    episode_count: int = Field(gt=0)
+    window_count: int = Field(gt=0)
+    normal_episode_count: int = Field(ge=0)
+    normal_window_count: int = Field(ge=0)
+    false_positive_episode_count: int = Field(ge=0)
+    false_positive_window_count: int = Field(ge=0)
+    false_positive_episode_rate: float = Field(ge=0.0, le=1.0)
+    false_positive_window_rate: float = Field(ge=0.0, le=1.0)
+    changed_episode_count: int = Field(ge=0)
+    detected_episode_count: int = Field(ge=0)
+    censored_episode_count: int = Field(ge=0)
+    detection_delays_s: tuple[float, ...]
+    detection_delay_p50_s: float | None = Field(default=None, ge=0.0)
+    detection_delay_p95_s: float | None = Field(default=None, ge=0.0)
+    by_node_count: tuple[DemoReplayNodeCountMetrics, ...]
+
+    @model_validator(mode="after")
+    def validate_replay_accounting(self) -> DemoReplayMetrics:
+        if self.window_count != self.episode_count * 17:
+            raise ValueError("replay window count must use 17 windows per episode")
+        if self.detected_episode_count + self.censored_episode_count != self.changed_episode_count:
+            raise ValueError("replay detection accounting is incomplete")
+        if len(self.detection_delays_s) != self.detected_episode_count:
+            raise ValueError("replay delay evidence differs from detected episodes")
+        return self
+
+
+class DemoPairedModelComparison(FrozenModel):
+    partition: Literal["validation", "test"]
+    task_id: TaskId
+    sample_count: int = Field(gt=0)
+    comparison: Literal["quantum-afse-vs-same-architecture-raw-state8"] = (
+        "quantum-afse-vs-same-architecture-raw-state8"
+    )
+    tie_tolerance: Literal[1e-12] = 1.0e-12
+    afse_balanced_accuracy: float = Field(ge=0.0, le=1.0)
+    raw_balanced_accuracy: float = Field(ge=0.0, le=1.0)
+    balanced_accuracy_delta: float = Field(ge=-1.0, le=1.0)
+    balanced_accuracy_delta_interval: BootstrapInterval
+    afse_macro_f1: float = Field(ge=0.0, le=1.0)
+    raw_macro_f1: float = Field(ge=0.0, le=1.0)
+    macro_f1_delta: float = Field(ge=-1.0, le=1.0)
+    macro_f1_delta_interval: BootstrapInterval
+    outcome: Literal["HELPED", "TIED", "HURT"]
+
+
 class DemoEvaluationMetrics(FrozenModel):
-    schema_version: Literal["aqse.network-demo.metrics.v1"] = (
-        "aqse.network-demo.metrics.v1"
+    schema_version: Literal["aqse.network-demo.metrics.v2"] = (
+        "aqse.network-demo.metrics.v2"
     )
     partition: Literal["validation", "test"]
     task_id: TaskId
+    profile_id: Literal["aqse.local-state8.v1", "aqse.network-state8.v1"]
     sample_count: int = Field(gt=0)
     eligible_count: int = Field(ge=0)
     class_order: tuple[str, ...] = Field(min_length=2)
     class_support: dict[str, int]
+    class_recall: dict[str, float | None]
     raw_confusion_columns: tuple[str, ...]
     raw_confusion_matrix: tuple[tuple[int, ...], ...]
     operational_confusion_columns: tuple[str, ...]
@@ -201,6 +311,8 @@ class DemoEvaluationMetrics(FrozenModel):
     predictions: tuple[str, ...]
     displayed_predictions: tuple[str, ...]
     episode_ids: tuple[str, ...]
+    by_node_count: tuple[DemoNodeCountMetrics, ...]
+    replay: DemoReplayMetrics | None = None
 
     @model_validator(mode="after")
     def validate_metrics(self) -> DemoEvaluationMetrics:
@@ -214,6 +326,8 @@ class DemoEvaluationMetrics(FrozenModel):
             raise ValueError("metrics must report independent episode units")
         if set(self.class_support) != set(self.class_order):
             raise ValueError("metric support keys must equal the frozen class order")
+        if set(self.class_recall) != set(self.class_order):
+            raise ValueError("metric recall keys must equal the frozen class order")
         if sum(self.class_support.values()) != size:
             raise ValueError("metric class support must account for every example")
         if len(self.raw_confusion_matrix) != len(self.class_order):
@@ -231,14 +345,29 @@ class DemoEvaluationMetrics(FrozenModel):
             value == ABSTAIN_CLASS for value in self.displayed_predictions
         ):
             raise ValueError("abstention count differs from displayed predictions")
+        expected_profile = (
+            "aqse.local-state8.v1"
+            if self.task_id == LOCAL_TASK_ID
+            else "aqse.network-state8.v1"
+        )
+        if self.profile_id != expected_profile:
+            raise ValueError("metric task and feature profile are incompatible")
+        if sum(item.sample_count for item in self.by_node_count) != size:
+            raise ValueError("node-count strata must account for every episode")
+        if len({item.node_count for item in self.by_node_count}) != len(
+            self.by_node_count
+        ):
+            raise ValueError("node-count metric strata must be unique")
+        if self.replay is not None and self.replay.episode_count != size:
+            raise ValueError("replay metrics must use the same independent episodes")
         return self
 
 
 class DemoResearchBundle(FrozenModel):
     """Cohesive non-executable deployment artifact for one state8 task."""
 
-    schema_version: Literal["aqse.network-demo.bundle.v1"] = (
-        "aqse.network-demo.bundle.v1"
+    schema_version: Literal["aqse.network-demo.bundle.v2"] = (
+        "aqse.network-demo.bundle.v2"
     )
     bundle_id: str = Field(pattern=r"^aqse-demo-bundle-[a-f0-9]{16}$")
     content_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
@@ -260,8 +389,10 @@ class DemoResearchBundle(FrozenModel):
     afse: NystromAFSEArtifact
     classifier: MLPClassifierArtifact
     raw_feature_baseline: MLPClassifierArtifact
+    observable_rule: ObservableRuleArtifact
     validation_metrics: DemoEvaluationMetrics
     raw_baseline_validation_metrics: DemoEvaluationMetrics
+    validation_comparison: DemoPairedModelComparison
     effective_source_hashes: dict[str, str]
 
     @model_validator(mode="after")
@@ -272,6 +403,7 @@ class DemoResearchBundle(FrozenModel):
 
         validate_mlp_artifact(self.classifier)
         validate_mlp_artifact(self.raw_feature_baseline)
+        validate_observable_rule_artifact(self.observable_rule)
         expected_profile = (
             "aqse.local-state8.v1"
             if self.task_id == LOCAL_TASK_ID
@@ -301,6 +433,15 @@ class DemoResearchBundle(FrozenModel):
             or self.raw_feature_baseline.feature_count != 8
         ):
             raise ValueError("bundle raw baseline is incompatible with the encoder")
+        if (
+            self.observable_rule.profile_id != self.profile_id
+            or self.observable_rule.profile_fingerprint != self.profile_fingerprint
+            or self.observable_rule.fitted_on_dataset_id
+            != self.fitted_on_dataset_id
+            or self.observable_rule.fitted_on_dataset_digest
+            != self.fitted_on_dataset_digest
+        ):
+            raise ValueError("bundle observable rule is incompatible with its fitted space")
         fitted_components = (self.afse, self.classifier, self.raw_feature_baseline)
         if any(
             item.fitted_on_dataset_id != self.fitted_on_dataset_id
@@ -319,6 +460,8 @@ class DemoResearchBundle(FrozenModel):
             or self.validation_metrics.task_id != self.task_id
             or self.raw_baseline_validation_metrics.partition != "validation"
             or self.raw_baseline_validation_metrics.task_id != self.task_id
+            or self.validation_comparison.partition != "validation"
+            or self.validation_comparison.task_id != self.task_id
         ):
             raise ValueError("bundle validation evidence is incompatible")
         if any(not _is_sha256(value) for value in self.effective_source_hashes.values()):
@@ -422,8 +565,8 @@ class DemoModelSelectionFreeze(FrozenModel):
 
 
 class DemoFinalEvaluation(FrozenModel):
-    schema_version: Literal["aqse.network-demo.final-evaluation.v1"] = (
-        "aqse.network-demo.final-evaluation.v1"
+    schema_version: Literal["aqse.network-demo.final-evaluation.v2"] = (
+        "aqse.network-demo.final-evaluation.v2"
     )
     evaluation_id: str = Field(pattern=r"^aqse-demo-final-[a-f0-9]{16}$")
     content_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
@@ -435,6 +578,11 @@ class DemoFinalEvaluation(FrozenModel):
     selection_changed: Literal[False] = False
     refit_performed: Literal[False] = False
     task_metrics: tuple[DemoEvaluationMetrics, DemoEvaluationMetrics]
+    raw_baseline_task_metrics: tuple[DemoEvaluationMetrics, DemoEvaluationMetrics]
+    paired_comparisons: tuple[
+        DemoPairedModelComparison,
+        DemoPairedModelComparison,
+    ]
 
     @model_validator(mode="after")
     def validate_final_evaluation(self) -> DemoFinalEvaluation:
@@ -443,6 +591,18 @@ class DemoFinalEvaluation(FrozenModel):
             NETWORK_TASK_ID,
         ) or any(item.partition != "test" for item in self.task_metrics):
             raise ValueError("final evaluation must contain ordered local/network TEST metrics")
+        if tuple(item.task_id for item in self.raw_baseline_task_metrics) != (
+            LOCAL_TASK_ID,
+            NETWORK_TASK_ID,
+        ) or any(
+            item.partition != "test" for item in self.raw_baseline_task_metrics
+        ):
+            raise ValueError("final evaluation raw baselines must be ordered TEST metrics")
+        if tuple(item.task_id for item in self.paired_comparisons) != (
+            LOCAL_TASK_ID,
+            NETWORK_TASK_ID,
+        ) or any(item.partition != "test" for item in self.paired_comparisons):
+            raise ValueError("final evaluation comparisons must be ordered TEST results")
         payload = self.model_dump(mode="json", exclude={"evaluation_id", "content_digest"})
         expected_digest = canonical_digest(payload)
         if self.content_digest != expected_digest:
@@ -473,6 +633,7 @@ class BundlePredictionBatch(FrozenModel):
     model_scores: MLPScoreBatch
     displayed_classes: tuple[str, ...]
     raw_baseline_scores: MLPScoreBatch
+    observable_rule_statuses: tuple[ObservableRuleStatus, ...]
 
 
 class ActiveBundlePointer(FrozenModel):
@@ -505,6 +666,7 @@ class BundleRuntime:
     afse: NystromAFSE
     classifier: NumpyMLPClassifier
     raw_baseline: NumpyMLPClassifier
+    observable_rule: ObservableRule
 
     @classmethod
     def from_artifact(cls, artifact: DemoResearchBundle) -> BundleRuntime:
@@ -518,6 +680,7 @@ class BundleRuntime:
             raw_baseline=NumpyMLPClassifier.from_artifact(
                 artifact.raw_feature_baseline
             ),
+            observable_rule=ObservableRule.from_artifact(artifact.observable_rule),
         )
 
     def predict(
@@ -562,6 +725,16 @@ class BundleRuntime:
                 strict=True,
             )
         )
+        rule_statuses = tuple(
+            self.observable_rule.evaluate(
+                observable_rule_query(
+                    self.artifact.observable_rule,
+                    sample_id=sample_id,
+                    feature_values=raw_features[index],
+                )
+            ).status
+            for index, sample_id in enumerate(sample_ids)
+        )
         return BundlePredictionBatch(
             bundle_id=self.artifact.bundle_id,
             task_id=self.artifact.task_id,
@@ -573,4 +746,5 @@ class BundleRuntime:
             model_scores=scores,
             displayed_classes=displayed,
             raw_baseline_scores=raw_scores,
+            observable_rule_statuses=rule_statuses,
         )

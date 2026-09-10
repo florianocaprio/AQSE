@@ -315,6 +315,51 @@ def test_network_context_requires_three_nodes_while_local_supports_one(
         assert local.quality.valid_for_quantum
 
 
+def test_network_context_excludes_invalid_peer_when_two_valid_peers_remain() -> None:
+    frames = _frames(node_ids=("A", "B", "C", "D"))
+    reference = build_state8_reference(frames)
+    changed = _replace_reading(
+        frames,
+        900,
+        "B",
+        quality_flags=(QualityFlag.STUCK,),
+    )
+
+    record = extract_state8_features(
+        changed,
+        reference=reference,
+        profile_id=NETWORK_STATE8_PROFILE_ID,
+        sensor_ids=("A",),
+    ).records[0]
+
+    assert record.quality.valid_for_quantum
+    assert record.peer_sensor_ids == ("C", "D")
+    assert all(value is not None for value in record.values)
+
+
+def test_network_context_rejects_window_with_fewer_than_two_valid_peers() -> None:
+    frames = _frames(node_ids=("A", "B", "C"))
+    reference = build_state8_reference(frames)
+    changed = _replace_reading(
+        frames,
+        900,
+        "B",
+        quality_flags=(QualityFlag.CLOCK_ERROR,),
+    )
+
+    record = extract_state8_features(
+        changed,
+        reference=reference,
+        profile_id=NETWORK_STATE8_PROFILE_ID,
+        sensor_ids=("A",),
+    ).records[0]
+
+    assert not record.quality.valid_for_quantum
+    assert record.peer_sensor_ids == ("C",)
+    assert record.values[5:7] == (None, None)
+    assert "insufficient_valid_peer_context" in record.quality.flags
+
+
 @pytest.fixture(scope="module")
 def three_node_frames() -> tuple[ObservationFrame, ...]:
     return _frames(node_ids=("A", "B", "C"))

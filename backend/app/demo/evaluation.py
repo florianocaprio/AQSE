@@ -18,6 +18,7 @@ from app.classical.mlp import (
 from app.classical.mlp import (
     query_context_for as mlp_context_for,
 )
+from app.classical.observable_rule import ObservableRule, fit_observable_rule
 from app.embeddings.nystrom import (
     NystromAFSE,
     fit_nystrom_afse,
@@ -40,10 +41,15 @@ from .bundle_models import (
     DemoEvaluationMetrics,
     DemoFinalEvaluation,
     DemoModelSelectionFreeze,
+    DemoNodeCountMetrics,
+    DemoPairedModelComparison,
+    DemoReplayMetrics,
+    DemoReplayNodeCountMetrics,
     DemoResearchBundle,
     DemoTaskExample,
     DemoTaskPartition,
     DemoThetaCandidate,
+    FeatureValues,
     TaskId,
     TaskSelection,
     canonical_digest,
@@ -82,6 +88,7 @@ def _source_hashes() -> dict[str, str]:
         "app/features/state8_encoding.py",
         "app/embeddings/nystrom.py",
         "app/classical/mlp.py",
+        "app/classical/observable_rule.py",
         "app/quantum/user_pipeline/tqk8.py",
     )
     return {name: file_sha256(root / name) for name in names}
@@ -132,6 +139,11 @@ def assemble_task_partition(
             if task_id == LOCAL_TASK_ID
             else observation.network_feature
         )
+        replay = (
+            observation.local_replay_features
+            if task_id == LOCAL_TASK_ID
+            else observation.network_replay_features
+        )
         if record is None or record.profile_id != profile_id:
             raise ValueError("study observation lacks its compatible task feature")
         target = label.local_label if task_id == LOCAL_TASK_ID else label.network_label
@@ -145,6 +157,11 @@ def assemble_task_partition(
                 feature_values=record.values,
                 eligible=record.quality.valid_for_quantum,
                 quality_flags=record.quality.flags,
+                replay_feature_values=tuple(item.values for item in replay),
+                replay_window_end_s=tuple(
+                    item.end_exclusive_time_s for item in replay
+                ),
+                event_start_s=label.event_start_s,
             )
         )
     if set(label_by_episode) != {item.episode_id for item in loaded.observations}:
@@ -356,6 +373,77 @@ def _bootstrap_intervals(
     return interval(balanced), interval(macro)
 
 
+def _class_recall(
+    truth: Sequence[str],
+    predicted: Sequence[str],
+    class_order: Sequence[str],
+) -> dict[str, float | None]:
+    return {
+        label: (
+            None
+            if (support := sum(value == label for value in truth)) == 0
+            else sum(
+                actual == label and result == label
+                for actual, result in zip(truth, predicted, strict=True)
+            )
+            / support
+        )
+        for label in class_order
+    }
+
+
+def _node_count_metrics(
+    partition: DemoTaskPartition,
+    *,
+    truth: tuple[str, ...],
+    raw: tuple[str, ...],
+    displayed: tuple[str, ...],
+    uncertain_samples: frozenset[str],
+    ood_samples: frozenset[str],
+) -> tuple[DemoNodeCountMetrics, ...]:
+    output: list[DemoNodeCountMetrics] = []
+    for node_count in sorted({item.node_count for item in partition.examples}):
+        indices = tuple(
+            index
+            for index, item in enumerate(partition.examples)
+            if item.node_count == node_count
+        )
+        node_truth = tuple(truth[index] for index in indices)
+        node_raw = tuple(raw[index] for index in indices)
+        node_displayed = tuple(displayed[index] for index in indices)
+        balanced, macro = _metric_pair(
+            node_truth,
+            node_raw,
+            partition.class_order,
+        )
+        identifiers = tuple(partition.examples[index].sample_id for index in indices)
+        abstentions = sum(value == ABSTAIN_CLASS for value in node_displayed)
+        eligible = sum(partition.examples[index].eligible for index in indices)
+        output.append(
+            DemoNodeCountMetrics(
+                node_count=node_count,
+                sample_count=len(indices),
+                eligible_count=eligible,
+                class_support={
+                    label: Counter(node_truth)[label]
+                    for label in partition.class_order
+                },
+                class_recall=_class_recall(
+                    node_truth,
+                    node_raw,
+                    partition.class_order,
+                ),
+                balanced_accuracy=balanced,
+                macro_f1=macro,
+                coverage=(len(indices) - abstentions) / len(indices),
+                abstention_count=abstentions,
+                uncertain_count=sum(item in uncertain_samples for item in identifiers),
+                heuristic_ood_count=sum(item in ood_samples for item in identifiers),
+            )
+        )
+    return tuple(output)
+
+
 def _metrics_from_predictions(
     partition: DemoTaskPartition,
     *,
@@ -379,10 +467,12 @@ def _metrics_from_predictions(
     return DemoEvaluationMetrics(
         partition=partition.partition,
         task_id=partition.task_id,
+        profile_id=partition.profile_id,
         sample_count=len(partition.examples),
         eligible_count=len(partition.examples) - quality_rejected,
         class_order=class_order,
         class_support={label: Counter(truth)[label] for label in class_order},
+        class_recall=_class_recall(truth, raw, class_order),
         raw_confusion_columns=columns,
         raw_confusion_matrix=_confusion(truth, raw, class_order, columns),
         operational_confusion_columns=columns,
@@ -399,6 +489,152 @@ def _metrics_from_predictions(
         predictions=raw,
         displayed_predictions=displayed,
         episode_ids=tuple(item.episode_id for item in partition.examples),
+        by_node_count=_node_count_metrics(
+            partition,
+            truth=truth,
+            raw=raw,
+            displayed=displayed,
+            uncertain_samples=uncertain_samples,
+            ood_samples=ood_samples,
+        ),
+    )
+
+
+def _replay_rows(
+    partition: DemoTaskPartition,
+) -> tuple[NDArray[np.float64], tuple[str, ...]] | None:
+    if not any(item.replay_feature_values for item in partition.examples):
+        return None
+    if any(not item.replay_feature_values for item in partition.examples):
+        raise ValueError("replay evidence must cover every independent episode")
+    rows: list[FeatureValues] = []
+    identifiers: list[str] = []
+    for example in partition.examples:
+        for index, values in enumerate(example.replay_feature_values):
+            rows.append(values)
+            identifiers.append(f"{example.sample_id}:replay:{index:02d}")
+    return np.asarray(rows, dtype=np.float64), tuple(identifiers)
+
+
+def _replay_node_summary(
+    examples: Sequence[DemoTaskExample],
+    predictions: Mapping[str, str],
+) -> tuple[DemoReplayNodeCountMetrics, ...]:
+    output: list[DemoReplayNodeCountMetrics] = []
+    for node_count in sorted({item.node_count for item in examples}):
+        selected = tuple(item for item in examples if item.node_count == node_count)
+        summary = _replay_summary_values(selected, predictions)
+        output.append(
+            DemoReplayNodeCountMetrics(
+                node_count=node_count,
+                episode_count=len(selected),
+                normal_episode_count=summary[0],
+                normal_window_count=summary[1],
+                false_positive_episode_count=summary[2],
+                false_positive_window_count=summary[3],
+                changed_episode_count=summary[4],
+                detected_episode_count=summary[5],
+                censored_episode_count=summary[6],
+                detection_delay_p50_s=summary[7],
+                detection_delay_p95_s=summary[8],
+            )
+        )
+    return tuple(output)
+
+
+def _replay_summary_values(
+    examples: Sequence[DemoTaskExample],
+    predictions: Mapping[str, str],
+) -> tuple[int, int, int, int, int, int, int, float | None, float | None, tuple[float, ...]]:
+    normal_episode_count = 0
+    normal_window_count = 0
+    false_positive_episode_count = 0
+    false_positive_window_count = 0
+    changed_episode_count = 0
+    detected_episode_count = 0
+    censored_episode_count = 0
+    delays: list[float] = []
+    for example in examples:
+        outputs = tuple(
+            predictions[f"{example.sample_id}:replay:{index:02d}"]
+            for index in range(len(example.replay_feature_values))
+        )
+        positive = tuple(
+            value not in {"NORMAL", ABSTAIN_CLASS, "UNCERTAIN"}
+            for value in outputs
+        )
+        if example.label == "NORMAL":
+            normal_episode_count += 1
+            normal_window_count += len(outputs)
+            false_positive_window_count += sum(positive)
+            false_positive_episode_count += any(positive)
+            continue
+        changed_episode_count += 1
+        assert example.event_start_s is not None
+        detected_delay = next(
+            (
+                end_s - example.event_start_s
+                for end_s, detected in zip(
+                    example.replay_window_end_s,
+                    positive,
+                    strict=True,
+                )
+                if end_s > example.event_start_s and detected
+            ),
+            None,
+        )
+        if detected_delay is None:
+            censored_episode_count += 1
+        else:
+            detected_episode_count += 1
+            delays.append(float(detected_delay))
+    delay_array = np.asarray(delays, dtype=np.float64)
+    p50 = None if not delays else float(np.quantile(delay_array, 0.50, method="linear"))
+    p95 = None if not delays else float(np.quantile(delay_array, 0.95, method="linear"))
+    return (
+        normal_episode_count,
+        normal_window_count,
+        false_positive_episode_count,
+        false_positive_window_count,
+        changed_episode_count,
+        detected_episode_count,
+        censored_episode_count,
+        p50,
+        p95,
+        tuple(delays),
+    )
+
+
+def _replay_metrics(
+    partition: DemoTaskPartition,
+    predictions: Mapping[str, str],
+) -> DemoReplayMetrics | None:
+    if not any(item.replay_feature_values for item in partition.examples):
+        return None
+    values = _replay_summary_values(partition.examples, predictions)
+    normal_episodes, normal_windows = values[0], values[1]
+    return DemoReplayMetrics(
+        episode_count=len(partition.examples),
+        window_count=sum(
+            len(item.replay_feature_values) for item in partition.examples
+        ),
+        normal_episode_count=normal_episodes,
+        normal_window_count=normal_windows,
+        false_positive_episode_count=values[2],
+        false_positive_window_count=values[3],
+        false_positive_episode_rate=(
+            values[2] / normal_episodes if normal_episodes else 0.0
+        ),
+        false_positive_window_rate=(
+            values[3] / normal_windows if normal_windows else 0.0
+        ),
+        changed_episode_count=values[4],
+        detected_episode_count=values[5],
+        censored_episode_count=values[6],
+        detection_delay_p50_s=values[7],
+        detection_delay_p95_s=values[8],
+        detection_delays_s=values[9],
+        by_node_count=_replay_node_summary(partition.examples, predictions),
     )
 
 
@@ -435,7 +671,7 @@ def _evaluate_fitted_candidate(
             strict=True,
         )
     }
-    return _metrics_from_predictions(
+    metrics = _metrics_from_predictions(
         partition,
         class_order=classifier.artifact.classes,
         raw_by_sample=raw_by_sample,
@@ -451,6 +687,36 @@ def _evaluate_fitted_candidate(
             if ood
         ),
     )
+    replay_rows = _replay_rows(partition)
+    if replay_rows is None:
+        return metrics
+    replay_raw, replay_ids = replay_rows
+    replay_encoded = encoder.transform(replay_raw, profile=profile)
+    replay_embedding = afse.transform(
+        replay_encoded,
+        sample_ids=replay_ids,
+        context=afse_context_for(afse.artifact),
+    )
+    replay_scores = classifier.runtime.score(
+        np.asarray(replay_embedding.vectors, dtype=np.float64),
+        sample_ids=replay_ids,
+        context=mlp_context_for(classifier.artifact),
+    )
+    replay_displayed = {
+        sample_id: (
+            ABSTAIN_CLASS if uncertain or ood else predicted
+        )
+        for sample_id, predicted, uncertain, ood in zip(
+            replay_ids,
+            replay_scores.predicted_classes,
+            replay_scores.uncertain,
+            replay_embedding.heuristic_ood,
+            strict=True,
+        )
+    }
+    return metrics.model_copy(
+        update={"replay": _replay_metrics(partition, replay_displayed)}
+    )
 
 
 def _evaluate_raw_baseline(
@@ -464,8 +730,16 @@ def _evaluate_raw_baseline(
         context=mlp_context_for(classifier.artifact),
     )
     raw_by_sample = dict(zip(sample_ids, scored.predicted_classes, strict=True))
-    displayed_by_sample = dict(zip(sample_ids, scored.displayed_classes, strict=True))
-    return _metrics_from_predictions(
+    displayed_by_sample = {
+        sample_id: ABSTAIN_CLASS if uncertain else predicted
+        for sample_id, predicted, uncertain in zip(
+            sample_ids,
+            scored.predicted_classes,
+            scored.uncertain,
+            strict=True,
+        )
+    }
+    metrics = _metrics_from_predictions(
         partition,
         class_order=classifier.artifact.classes,
         raw_by_sample=raw_by_sample,
@@ -477,6 +751,95 @@ def _evaluate_raw_baseline(
         ),
         ood_samples=frozenset(),
     )
+    replay_rows = _replay_rows(partition)
+    if replay_rows is None:
+        return metrics
+    replay_raw, replay_ids = replay_rows
+    replay_scores = classifier.runtime.score(
+        replay_raw,
+        sample_ids=replay_ids,
+        context=mlp_context_for(classifier.artifact),
+    )
+    replay_displayed = {
+        sample_id: ABSTAIN_CLASS if uncertain else predicted
+        for sample_id, predicted, uncertain in zip(
+            replay_ids,
+            replay_scores.predicted_classes,
+            replay_scores.uncertain,
+            strict=True,
+        )
+    }
+    return metrics.model_copy(
+        update={"replay": _replay_metrics(partition, replay_displayed)}
+    )
+
+
+def _paired_model_comparison(
+    partition: DemoTaskPartition,
+    afse: DemoEvaluationMetrics,
+    raw: DemoEvaluationMetrics,
+) -> DemoPairedModelComparison:
+    if (
+        afse.partition != raw.partition
+        or afse.task_id != raw.task_id
+        or afse.episode_ids != raw.episode_ids
+        or afse.episode_ids != tuple(item.episode_id for item in partition.examples)
+    ):
+        raise ValueError("paired model comparison requires identical episode ordering")
+    truth = np.asarray([item.label for item in partition.examples], dtype=str)
+    afse_predictions = np.asarray(afse.predictions, dtype=str)
+    raw_predictions = np.asarray(raw.predictions, dtype=str)
+    random = np.random.default_rng(
+        FROZEN_NETWORK_DEMO_PROTOCOL.seeds.paired_bootstrap
+    )
+    balanced_deltas: list[float] = []
+    macro_deltas: list[float] = []
+    for _ in range(BOOTSTRAP_REPLICATES):
+        indices = random.integers(0, len(truth), size=len(truth))
+        afse_score = _metric_pair(
+            truth[indices].tolist(),
+            afse_predictions[indices].tolist(),
+            partition.class_order,
+        )
+        raw_score = _metric_pair(
+            truth[indices].tolist(),
+            raw_predictions[indices].tolist(),
+            partition.class_order,
+        )
+        balanced_deltas.append(afse_score[0] - raw_score[0])
+        macro_deltas.append(afse_score[1] - raw_score[1])
+
+    def interval(values: list[float]) -> BootstrapInterval:
+        lower, upper = np.quantile(values, (0.025, 0.975), method="linear")
+        return BootstrapInterval(
+            lower=float(lower),
+            upper=float(upper),
+            replicates=BOOTSTRAP_REPLICATES,
+            degenerate=bool(lower == upper),
+        )
+
+    balanced_delta = afse.balanced_accuracy - raw.balanced_accuracy
+    macro_delta = afse.macro_f1 - raw.macro_f1
+    if balanced_delta > 1.0e-12:
+        outcome = "HELPED"
+    elif balanced_delta < -1.0e-12:
+        outcome = "HURT"
+    else:
+        outcome = "TIED"
+    return DemoPairedModelComparison(
+        partition=afse.partition,
+        task_id=afse.task_id,
+        sample_count=afse.sample_count,
+        afse_balanced_accuracy=afse.balanced_accuracy,
+        raw_balanced_accuracy=raw.balanced_accuracy,
+        balanced_accuracy_delta=balanced_delta,
+        balanced_accuracy_delta_interval=interval(balanced_deltas),
+        afse_macro_f1=afse.macro_f1,
+        raw_macro_f1=raw.macro_f1,
+        macro_f1_delta=macro_delta,
+        macro_f1_delta_interval=interval(macro_deltas),
+        outcome=outcome,
+    )
 
 
 def _make_bundle(
@@ -487,13 +850,15 @@ def _make_bundle(
     afse: NystromAFSE,
     classifier: FittedMLP,
     raw_baseline: FittedMLP,
+    observable_rule: ObservableRule,
     validation_metrics: DemoEvaluationMetrics,
     raw_validation_metrics: DemoEvaluationMetrics,
+    validation_comparison: DemoPairedModelComparison,
     train_dataset_id: str,
     train_dataset_digest: str,
 ) -> DemoResearchBundle:
     scientific: dict[str, Any] = {
-        "schema_version": "aqse.network-demo.bundle.v1",
+        "schema_version": "aqse.network-demo.bundle.v2",
         "scientific_label": "research / not validated for field deployment",
         "study_artifact_id": train.study_artifact_id,
         "study_content_digest": train.study_content_digest,
@@ -510,10 +875,12 @@ def _make_bundle(
         "afse": afse.artifact.model_dump(mode="json"),
         "classifier": classifier.artifact.model_dump(mode="json"),
         "raw_feature_baseline": raw_baseline.artifact.model_dump(mode="json"),
+        "observable_rule": observable_rule.artifact.model_dump(mode="json"),
         "validation_metrics": validation_metrics.model_dump(mode="json"),
         "raw_baseline_validation_metrics": raw_validation_metrics.model_dump(
             mode="json"
         ),
+        "validation_comparison": validation_comparison.model_dump(mode="json"),
         "effective_source_hashes": _source_hashes(),
     }
     content_digest = canonical_digest(scientific)
@@ -603,6 +970,14 @@ def fit_demo_task_candidates(
         fitted_on_dataset_digest=train_dataset_digest,
         feature_order=encoder.artifact.feature_order,
     )
+    observable_rule = fit_observable_rule(
+        train_raw,
+        train_labels,
+        sample_ids=train_ids,
+        profile=profile,
+        fitted_on_dataset_id=train_dataset_id,
+        fitted_on_dataset_digest=train_dataset_digest,
+    )
     raw_validation_metrics = _evaluate_raw_baseline(validation, raw_baseline)
     bundles: list[DemoResearchBundle] = []
     for candidate in candidate_specs:
@@ -643,6 +1018,11 @@ def fit_demo_task_candidates(
             afse=afse,
             classifier=classifier,
         )
+        validation_comparison = _paired_model_comparison(
+            validation,
+            validation_metrics,
+            raw_validation_metrics,
+        )
         bundles.append(
             _make_bundle(
                 train=train,
@@ -651,8 +1031,10 @@ def fit_demo_task_candidates(
                 afse=afse,
                 classifier=classifier,
                 raw_baseline=raw_baseline,
+                observable_rule=observable_rule,
                 validation_metrics=validation_metrics,
                 raw_validation_metrics=raw_validation_metrics,
+                validation_comparison=validation_comparison,
                 train_dataset_id=train_dataset_id,
                 train_dataset_digest=train_dataset_digest,
             )
@@ -768,7 +1150,7 @@ def evaluate_bundle(
         zip(sample_ids, prediction.model_scores.predicted_classes, strict=True)
     )
     displayed_by_sample = dict(zip(sample_ids, prediction.displayed_classes, strict=True))
-    return _metrics_from_predictions(
+    metrics = _metrics_from_predictions(
         partition,
         class_order=bundle.class_order,
         raw_by_sample=raw_by_sample,
@@ -792,6 +1174,120 @@ def evaluate_bundle(
             if ood
         ),
     )
+    replay_rows = _replay_rows(partition)
+    if replay_rows is None:
+        return metrics
+    replay_raw, replay_ids = replay_rows
+    replay_prediction = runtime.predict(
+        replay_raw,
+        sample_ids=replay_ids,
+        context=BundleQueryContext(
+            bundle_id=bundle.bundle_id,
+            task_id=bundle.task_id,
+            profile_id=bundle.profile_id,
+            profile_fingerprint=bundle.profile_fingerprint,
+            query_acquisition_id=f"{query_acquisition_id}:replay",
+        ),
+    )
+    return metrics.model_copy(
+        update={
+            "replay": _replay_metrics(
+                partition,
+                dict(
+                    zip(
+                        replay_ids,
+                        replay_prediction.displayed_classes,
+                        strict=True,
+                    )
+                ),
+            )
+        }
+    )
+
+
+def evaluate_raw_baseline(
+    bundle: DemoResearchBundle,
+    partition: DemoTaskPartition,
+) -> DemoEvaluationMetrics:
+    """Evaluate the frozen same-architecture raw-State8 reference."""
+
+    runtime = BundleRuntime.from_artifact(bundle)
+    raw, sample_ids, _, _ = _eligible_rows(partition)
+    scored = runtime.raw_baseline.score(
+        raw,
+        sample_ids=sample_ids,
+        context=mlp_context_for(bundle.raw_feature_baseline),
+    )
+    metrics = _metrics_from_predictions(
+        partition,
+        class_order=bundle.class_order,
+        raw_by_sample=dict(zip(sample_ids, scored.predicted_classes, strict=True)),
+        displayed_by_sample={
+            sample_id: ABSTAIN_CLASS if uncertain else predicted
+            for sample_id, predicted, uncertain in zip(
+                sample_ids,
+                scored.predicted_classes,
+                scored.uncertain,
+                strict=True,
+            )
+        },
+        uncertain_samples=frozenset(
+            sample_id
+            for sample_id, uncertain in zip(
+                sample_ids,
+                scored.uncertain,
+                strict=True,
+            )
+            if uncertain
+        ),
+        ood_samples=frozenset(),
+    )
+    replay_rows = _replay_rows(partition)
+    if replay_rows is None:
+        return metrics
+    replay_raw, replay_ids = replay_rows
+    replay_scores = runtime.raw_baseline.score(
+        replay_raw,
+        sample_ids=replay_ids,
+        context=mlp_context_for(bundle.raw_feature_baseline),
+    )
+    replay_displayed = {
+        sample_id: ABSTAIN_CLASS if uncertain else predicted
+        for sample_id, predicted, uncertain in zip(
+            replay_ids,
+            replay_scores.predicted_classes,
+            replay_scores.uncertain,
+            strict=True,
+        )
+    }
+    return metrics.model_copy(
+        update={"replay": _replay_metrics(partition, replay_displayed)}
+    )
+
+
+def evaluate_bundle_evidence(
+    bundle: DemoResearchBundle,
+    partition: DemoTaskPartition,
+    *,
+    query_acquisition_id: str,
+) -> tuple[
+    DemoEvaluationMetrics,
+    DemoEvaluationMetrics,
+    DemoPairedModelComparison,
+]:
+    """Replay the complete frozen AFSE/raw comparative evidence on one partition."""
+
+    afse_metrics = evaluate_bundle(
+        bundle,
+        partition,
+        query_acquisition_id=query_acquisition_id,
+    )
+    raw_metrics = evaluate_raw_baseline(bundle, partition)
+    return (
+        afse_metrics,
+        raw_metrics,
+        _paired_model_comparison(partition, afse_metrics, raw_metrics),
+    )
 
 
 def evaluate_frozen_test(
@@ -810,6 +1306,8 @@ def evaluate_frozen_test(
     if any(item.partition != "test" for item in partitions):
         raise ValueError("final evaluation cannot use a non-TEST partition")
     metrics: list[DemoEvaluationMetrics] = []
+    raw_metrics: list[DemoEvaluationMetrics] = []
+    comparisons: list[DemoPairedModelComparison] = []
     for selection, partition in zip(freeze.selections, partitions, strict=True):
         bundle = bundles.get(selection.selected_bundle_id)
         if bundle is None:
@@ -821,15 +1319,16 @@ def evaluate_frozen_test(
             or partition.study_content_digest != freeze.study_content_digest
         ):
             raise ValueError("TEST data or selected bundle differs from the frozen study")
-        metrics.append(
-            evaluate_bundle(
-                bundle,
-                partition,
-                query_acquisition_id=query_acquisition_id,
-            )
+        task_metrics, task_raw_metrics, comparison = evaluate_bundle_evidence(
+            bundle,
+            partition,
+            query_acquisition_id=query_acquisition_id,
         )
+        metrics.append(task_metrics)
+        raw_metrics.append(task_raw_metrics)
+        comparisons.append(comparison)
     scientific = {
-        "schema_version": "aqse.network-demo.final-evaluation.v1",
+        "schema_version": "aqse.network-demo.final-evaluation.v2",
         "freeze_id": freeze.freeze_id,
         "study_artifact_id": freeze.study_artifact_id,
         "study_content_digest": freeze.study_content_digest,
@@ -838,6 +1337,12 @@ def evaluate_frozen_test(
         "selection_changed": False,
         "refit_performed": False,
         "task_metrics": [item.model_dump(mode="json") for item in metrics],
+        "raw_baseline_task_metrics": [
+            item.model_dump(mode="json") for item in raw_metrics
+        ],
+        "paired_comparisons": [
+            item.model_dump(mode="json") for item in comparisons
+        ],
     }
     digest = canonical_digest(scientific)
     return DemoFinalEvaluation.model_validate(

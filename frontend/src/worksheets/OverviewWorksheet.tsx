@@ -142,7 +142,7 @@ export function OverviewWorksheet() {
         </div>
         <dl className="quality-grid">
           <div><dt>Application</dt><dd title={registry?.active?.application_id ?? undefined}>{compactId(registry?.active?.application_id)}</dd></div>
-          <div><dt>Selection freeze</dt><dd title={registry?.selection_freeze_id ?? undefined}>{compactId(registry?.selection_freeze_id)}</dd></div>
+          <div><dt>Active selection freeze</dt><dd title={registry?.active?.selection_freeze_id ?? undefined}>{compactId(registry?.active?.selection_freeze_id)}</dd></div>
           <div><dt>Local bundle</dt><dd title={localBundle?.bundle_id}>{compactId(localBundle?.bundle_id)}</dd></div>
           <div><dt>Network bundle</dt><dd title={networkBundle?.bundle_id}>{compactId(networkBundle?.bundle_id)}</dd></div>
           <div><dt>Analysis epoch</dt><dd>{analysis?.worker_epoch ?? "—"}</dd></div>

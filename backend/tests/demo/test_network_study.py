@@ -5,14 +5,22 @@ from collections import Counter
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 import app.demo.study_storage as study_storage
+from app.demo.bundle_models import LOCAL_TASK_ID
+from app.demo.evaluation import _replay_metrics, assemble_task_partition
 from app.demo.protocol import FROZEN_NETWORK_DEMO_PROTOCOL, SCENARIOS
 from app.demo.study import generate_network_study_episode
-from app.demo.study_models import NetworkStudyBuild, NetworkStudyEpisodePlan
+from app.demo.study_models import (
+    LoadedStudyPartition,
+    NetworkStudyBuild,
+    NetworkStudyEpisodePlan,
+)
+from app.features.state8_models import State8FeatureQuality
 
 EXPECTED_PROTOCOL_DIGEST = (
-    "986c362dfe0feed39bba2d959e9904c7c6903f541a010704d3f9c444eff6c099"
+    "9f8545865a1d176220803f11fa66505cbe0753d2e23f11137eb34db0400dab60"
 )
 
 
@@ -42,6 +50,86 @@ def test_protocol_digest_is_deterministic_and_frozen() -> None:
         FROZEN_NETWORK_DEMO_PROTOCOL.model_copy().digest
         == FROZEN_NETWORK_DEMO_PROTOCOL.digest
     )
+
+
+def test_replay_metrics_use_independent_episodes_and_causal_detection_delay(
+    fixture_network_study_build: NetworkStudyBuild,
+) -> None:
+    observations = tuple(
+        item
+        for item in fixture_network_study_build.observations
+        if item.partition == "validation"
+    )
+    labels = tuple(
+        item
+        for item in fixture_network_study_build.labels
+        if item.partition == "validation"
+    )
+    partition = assemble_task_partition(
+        LoadedStudyPartition(
+            partition="validation",
+            observations=observations,
+            labels=labels,
+        ),
+        task_id=LOCAL_TASK_ID,
+        study_artifact_id="aqse-network-study-1111111111111111",
+        study_content_digest="1" * 64,
+    )
+    predictions: dict[str, str] = {}
+    for example in partition.examples:
+        for index in range(17):
+            prediction = "NORMAL"
+            if example.label == "NORMAL" and index == 0:
+                prediction = "CHANGE_DETECTED"
+            elif example.label != "NORMAL" and index == 3:
+                # The fourth [11,15) causal window first closes 1 s after onset.
+                prediction = "CHANGE_DETECTED"
+            predictions[f"{example.sample_id}:replay:{index:02d}"] = prediction
+
+    metrics = _replay_metrics(partition, predictions)
+
+    assert metrics is not None
+    assert metrics.episode_count == 32
+    assert metrics.window_count == 32 * 17
+    assert metrics.normal_episode_count == 8
+    assert metrics.false_positive_episode_count == 8
+    assert metrics.changed_episode_count == 24
+    assert metrics.detected_episode_count == 24
+    assert metrics.censored_episode_count == 0
+    assert metrics.detection_delays_s == (1.0,) * 24
+    assert metrics.detection_delay_p50_s == 1.0
+    assert tuple(item.node_count for item in metrics.by_node_count) == tuple(range(1, 9))
+    assert FROZEN_NETWORK_DEMO_PROTOCOL.schema_version.endswith(".v2")
+    assert FROZEN_NETWORK_DEMO_PROTOCOL.evaluation.replay_window_starts_s == tuple(
+        range(8, 25)
+    )
+    assert (
+        FROZEN_NETWORK_DEMO_PROTOCOL.evaluation.paired_bootstrap_replicates
+        == 1_000
+    )
+
+
+def test_replay_sealing_rejects_incomplete_quality_accounting(
+    fixture_network_study_build: NetworkStudyBuild,
+) -> None:
+    observation = fixture_network_study_build.observations[0]
+    first = observation.local_replay_features[0]
+    incomplete = first.model_copy(
+        update={
+            "quality": State8FeatureQuality(
+                valid_for_quantum=True,
+                flags=(),
+                per_feature_valid=(True, True, True, True, True, True, True, True),
+                received_sample_count=399,
+                usable_sample_count=399,
+            )
+        }
+    )
+    payload = observation.model_dump(mode="json")
+    payload["local_replay_features"][0] = incomplete.model_dump(mode="json")
+
+    with pytest.raises(ValidationError, match="replay feature is incomplete"):
+        type(observation).model_validate(payload)
 
 
 def test_plans_cover_exactly_160_episodes_and_the_frozen_split(
@@ -113,7 +201,7 @@ def test_generation_plans_cover_sham_spatial_device_and_ambiguous_modes(
     device_event_ids = {
         by_key[("DEVICE_COMPATIBLE", 3, replicate)]
         .network_configuration["events"][0]["event_id"]
-        for replicate in range(5)
+        for replicate in (0, 1, 2, 4)
     }
     ambiguous_common = by_key[("MIXED_OR_AMBIGUOUS", 3, 0)].network_configuration
     ambiguous_shared = by_key[("MIXED_OR_AMBIGUOUS", 3, 1)].network_configuration
@@ -123,12 +211,23 @@ def test_generation_plans_cover_sham_spatial_device_and_ambiguous_modes(
     moving_source = environment["environment"]["dipoles"][0]
     assert moving_source["source_id"] == "moving-spatial-source"
     assert moving_source["velocity_m_per_s"][0] > 0.0
+    assert moving_source["active_start_time_s"] == 14.0
+    assert moving_source["active_duration_s"] == 10.0
+    assert environment["events"] == []
     assert device_event_ids == {
         "focal-device-bias",
         "focal-device-drift",
         "focal-device-noise",
-        "focal-device-thermal-window",
     }
+    thermal = by_key[("DEVICE_COMPATIBLE", 3, 3)].network_configuration
+    focal_thermal = next(
+        node
+        for node in thermal["nodes"]
+        if node["sensor_id"] == by_key[("DEVICE_COMPATIBLE", 3, 3)].focal_sensor_id
+    )["errors"]["temperature_driver"]
+    assert focal_thermal["start_time_s"] == 14.0
+    assert focal_thermal["ramp_duration_s"] == 10.0
+    assert thermal["events"] == []
     assert ambiguous_common["events"][0]["kind"] == "world_field_offset"
     assert ambiguous_shared["events"][0]["kind"] == "shared_instrument_offset"
     assert any(
@@ -136,6 +235,39 @@ def test_generation_plans_cover_sham_spatial_device_and_ambiguous_modes(
         != sorted(node["sensor_id"] for node in plan.network_configuration["nodes"])
         for plan in network_study_plans
     )
+
+
+def test_plan_sealing_rejects_early_environment_and_thermal_onsets(
+    network_study_plans: tuple[NetworkStudyEpisodePlan, ...],
+) -> None:
+    environment = next(
+        plan
+        for plan in network_study_plans
+        if plan.scenario == "ENVIRONMENT_COMPATIBLE" and plan.node_count == 3
+    )
+    environment_payload = environment.model_dump(mode="json")
+    environment_payload["network_configuration"]["environment"]["dipoles"][0][
+        "active_start_time_s"
+    ] = 0.0
+    with pytest.raises(ValidationError, match="dipole activation"):
+        NetworkStudyEpisodePlan.model_validate(environment_payload)
+
+    thermal = next(
+        plan
+        for plan in network_study_plans
+        if plan.scenario == "DEVICE_COMPATIBLE"
+        and plan.node_count == 3
+        and plan.replicate_index == 3
+    )
+    thermal_payload = thermal.model_dump(mode="json")
+    focal = next(
+        node
+        for node in thermal_payload["network_configuration"]["nodes"]
+        if node["sensor_id"] == thermal.focal_sensor_id
+    )
+    focal["errors"]["temperature_driver"]["start_time_s"] = 0.0
+    with pytest.raises(ValidationError, match="thermal driver activation"):
+        NetworkStudyEpisodePlan.model_validate(thermal_payload)
 
 
 def test_real_episode_produces_one_valid_frozen_local_and_network_window(
@@ -150,7 +282,12 @@ def test_real_episode_produces_one_valid_frozen_local_and_network_window(
     assert observation.local_feature.end_exclusive_time_s == 22.0
     assert observation.network_feature.start_time_s == 18.0
     assert observation.network_feature.end_exclusive_time_s == 22.0
+    assert len(observation.local_replay_features) == 17
+    assert len(observation.network_replay_features) == 17
+    assert observation.local_replay_features[0].start_time_s == 8.0
+    assert observation.local_replay_features[-1].end_exclusive_time_s == 28.0
     assert label.network_label == "MIXED_OR_AMBIGUOUS"
+    assert label.event_start_s == 14.0
 
 
 def test_observation_label_and_generation_channels_are_structurally_separate(
@@ -167,7 +304,13 @@ def test_observation_label_and_generation_channels_are_structurally_separate(
         "episode_seed",
         "network_configuration",
     } & observation.keys()
-    assert not {"local_feature", "network_feature", "episode_seed"} & label.keys()
+    assert not {
+        "local_feature",
+        "network_feature",
+        "local_replay_features",
+        "network_replay_features",
+        "episode_seed",
+    } & label.keys()
     assert {"scenario", "episode_seed", "network_configuration"} <= generation.keys()
 
 

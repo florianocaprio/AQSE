@@ -1,15 +1,70 @@
 export type DemoTaskId = "aqse.local-change.v1" | "aqse.network-pattern.v1";
 export type State8ProfileId = "aqse.local-state8.v1" | "aqse.network-state8.v1";
 
+export type DemoNodeCountSummary = {
+  node_count: number;
+  sample_count: number;
+  eligible_count: number;
+  class_support: Record<string, number>;
+  balanced_accuracy: number;
+  macro_f1: number;
+  coverage: number;
+};
+
+export type DemoReplaySummary = {
+  episode_count: number;
+  window_count: number;
+  false_positive_episode_rate: number;
+  false_positive_window_rate: number;
+  changed_episode_count: number;
+  detected_episode_count: number;
+  censored_episode_count: number;
+  detection_delay_p50_s: number | null;
+  detection_delay_p95_s: number | null;
+};
+
+export type DemoBootstrapInterval = {
+  confidence_level: 0.95;
+  lower: number;
+  upper: number;
+  replicates: number;
+  seed: 2001006;
+  resampling_unit: "independent_episode";
+  degenerate: boolean;
+};
+
+export type DemoPairedModelComparison = {
+  partition: "validation" | "test";
+  task_id: DemoTaskId;
+  sample_count: number;
+  comparison: "quantum-afse-vs-same-architecture-raw-state8";
+  tie_tolerance: 1e-12;
+  afse_balanced_accuracy: number;
+  raw_balanced_accuracy: number;
+  balanced_accuracy_delta: number;
+  balanced_accuracy_delta_interval: DemoBootstrapInterval;
+  afse_macro_f1: number;
+  raw_macro_f1: number;
+  macro_f1_delta: number;
+  macro_f1_delta_interval: DemoBootstrapInterval;
+  outcome: "HELPED" | "TIED" | "HURT";
+};
+
 export type DemoMetricSummary = {
   partition: "validation" | "test";
   task_id: DemoTaskId;
+  profile_id: State8ProfileId;
   balanced_accuracy: number;
   macro_f1: number;
   coverage: number;
   sample_count: number;
+  eligible_count: number;
+  class_support: Record<string, number>;
+  class_recall: Record<string, number | null>;
   uncertain_count: number;
   heuristic_ood_count: number;
+  by_node_count: DemoNodeCountSummary[];
+  replay: DemoReplaySummary | null;
 };
 
 export type DemoBundleSummary = {
@@ -26,6 +81,7 @@ export type DemoBundleSummary = {
   class_order: string[];
   validation: DemoMetricSummary;
   raw_baseline_validation: DemoMetricSummary;
+  validation_comparison: DemoPairedModelComparison;
   active: boolean;
 };
 
@@ -39,8 +95,16 @@ export type ActiveBundlePointer = {
   previous_application_id: string | null;
 };
 
+export type DemoSelectionFreezeSummary = {
+  freeze_id: string;
+  study_artifact_id: string;
+  study_content_digest: string;
+  local_bundle_id: string;
+  network_bundle_id: string;
+};
+
 export type DemoRegistryView = {
-  schema_version: "aqse.demo-registry-view.v1";
+  schema_version: "aqse.demo-registry-view.v2";
   prepared: boolean;
   scientific_label: "research / not validated for field deployment";
   study_artifact_id: string | null;
@@ -50,9 +114,18 @@ export type DemoRegistryView = {
   historical_test_ledger_sha256: string;
   active: ActiveBundlePointer | null;
   bundles: DemoBundleSummary[];
+  selection_freezes: DemoSelectionFreezeSummary[];
   final_metrics: DemoMetricSummary[];
+  final_raw_baseline_metrics: DemoMetricSummary[];
+  final_comparisons: DemoPairedModelComparison[];
   preparation_detail: string;
 };
+
+export type ObservableRuleStatus =
+  | "NO_OBSERVED_CHANGE"
+  | "COMMON_CHANGE_AMBIGUOUS"
+  | "SPATIAL_DISAGREEMENT_AMBIGUOUS"
+  | "MIXED_OBSERVABLE_CHANGE";
 
 export type DemoContextMode =
   | "local"
@@ -100,6 +173,7 @@ export type DemoAnalysisResult = {
   top_two_margin: number | null;
   raw_baseline_scores: number[] | null;
   raw_baseline_class: string | null;
+  observable_rule_status: ObservableRuleStatus | null;
   score_semantics: "model-score;not-probability-calibrated";
   data_age_ms: number;
   processing_duration_ms: number;
@@ -157,4 +231,105 @@ export type DemoTrainingJobView = {
   selected_local_bundle_id: string | null;
   selected_network_bundle_id: string | null;
   error: string | null;
+};
+
+export type KnowledgeTask = "local" | "network";
+
+export type KnowledgeState8Quality = {
+  valid_for_quantum: boolean;
+  flags: string[];
+  per_feature_valid: [boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean];
+  expected_sample_count: 400;
+  received_sample_count: number;
+  usable_sample_count: number;
+};
+
+export type KnowledgeState8Feature = {
+  schema_version: "aqse.state8-feature-record.v1";
+  window_id: string;
+  session_id: string;
+  sensor_id: string;
+  profile_id: State8ProfileId;
+  profile_fingerprint: string;
+  reference_id: string;
+  start_time_s: number;
+  end_exclusive_time_s: number;
+  source_frame_ids: number[];
+  peer_sensor_ids: string[];
+  values: (number | null)[];
+  quality: KnowledgeState8Quality;
+};
+
+export type KnowledgeObservationEpisode = {
+  schema_version: "aqse.network-demo.knowledge-observation.v1";
+  observation_id: string;
+  acquisition_id: string;
+  content_digest: string;
+  task: KnowledgeTask;
+  task_id: DemoTaskId;
+  profile_id: State8ProfileId;
+  profile_fingerprint: string;
+  node_count: number;
+  feature: KnowledgeState8Feature;
+};
+
+export type KnowledgeReviewedLabel = {
+  schema_version: "aqse.network-demo.human-reviewed-label.v1";
+  label_id: string;
+  content_digest: string;
+  observation_id: string;
+  task: KnowledgeTask;
+  task_id: DemoTaskId;
+  label: string;
+  review_source: "human-review";
+  reviewer_id: string;
+  reviewed_at_utc: string;
+  review_declaration: "label assigned by explicit human review";
+};
+
+export type KnowledgeCollectionEntry = {
+  observation_id: string;
+  observation_content_digest: string;
+  observation_file_sha256: string;
+  label_id: string;
+  label_content_digest: string;
+  label_file_sha256: string;
+};
+
+export type KnowledgeTrainCollection = {
+  schema_version: "aqse.network-demo.train-collection.v1";
+  collection_id: string;
+  content_digest: string;
+  partition: "TRAIN";
+  task: KnowledgeTask;
+  task_id: DemoTaskId;
+  profile_id: State8ProfileId;
+  profile_fingerprint: string;
+  class_order: string[];
+  approved_by: string;
+  approved_at_utc: string;
+  approval_declaration: "explicitly approved for bounded TRAIN-only retraining";
+  entries: KnowledgeCollectionEntry[];
+};
+
+export type KnowledgeRegistryView = {
+  schema_version: "aqse.network-demo.knowledge-registry.v1";
+  observations: KnowledgeObservationEpisode[];
+  reviewed_labels: KnowledgeReviewedLabel[];
+  approved_train_collections: KnowledgeTrainCollection[];
+};
+
+export type KnowledgeCaptureResponse = {
+  observation: KnowledgeObservationEpisode;
+  reused: boolean;
+};
+
+export type KnowledgeLabelResponse = {
+  label: KnowledgeReviewedLabel;
+  reused: boolean;
+};
+
+export type KnowledgeCollectionResponse = {
+  collection: KnowledgeTrainCollection;
+  reused: boolean;
 };

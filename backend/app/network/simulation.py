@@ -83,11 +83,14 @@ def _ambient_temperature_target_K(
     driver = errors.temperature_driver
     if driver is None or driver.kind is TemperatureDriverKind.CONSTANT:
         return errors.ambient_temperature_K
+    if sim_time_s < driver.start_time_s:
+        return errors.ambient_temperature_K
+    elapsed_since_start_s = sim_time_s - driver.start_time_s
     if driver.kind is TemperatureDriverKind.RAMP:
-        elapsed_s = min(max(0.0, sim_time_s), driver.ramp_duration_s)
+        elapsed_s = min(elapsed_since_start_s, driver.ramp_duration_s)
         return errors.ambient_temperature_K + driver.ramp_rate_K_per_s * elapsed_s
     return errors.ambient_temperature_K + driver.sinusoidal_amplitude_K * sin(
-        2.0 * pi * driver.sinusoidal_frequency_Hz * sim_time_s
+        2.0 * pi * driver.sinusoidal_frequency_Hz * elapsed_since_start_s
         + driver.sinusoidal_phase_rad
     )
 

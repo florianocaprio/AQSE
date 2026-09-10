@@ -18,7 +18,7 @@ from app.demo.study_models import (
     NetworkStudyObservation,
     StudyPartition,
 )
-from app.features.state8 import build_state8_reference, extract_latest_state8_window
+from app.features.state8 import build_state8_reference, extract_state8_features
 from app.features.state8_models import (
     LOCAL_STATE8_PROFILE_ID,
     NETWORK_STATE8_PROFILE_ID,
@@ -136,12 +136,13 @@ def _study_configuration(
                 update={
                     "temperature_driver": TemperatureDriverConfiguration(
                         kind=TemperatureDriverKind.RAMP,
+                        start_time_s=domain.event_start_s,
                         ramp_rate_K_per_s=float(
                             random.uniform(
                                 *domain.focal_temperature_ramp_k_per_s_range
                             )
                         ),
-                        ramp_duration_s=domain.episode_duration_s,
+                        ramp_duration_s=domain.event_duration_s,
                     ),
                     "thermal_bias_T_per_K": (
                         float(
@@ -217,17 +218,11 @@ def _study_configuration(
                             float(direction[2] * moment_amplitude),
                         ),
                         minimum_distance_m=0.20,
+                        active_start_time_s=domain.event_start_s,
+                        active_duration_s=domain.event_duration_s,
                     ),
                 )
             }
-        )
-        events.append(
-            NetworkEventConfiguration(
-                event_id="moving-source-analysis-window",
-                kind=EventKind.WORLD_FIELD_OFFSET,
-                start_time_s=domain.event_start_s,
-                duration_s=domain.event_duration_s,
-            )
         )
     elif scenario == "DEVICE_COMPATIBLE":
         if device_mode == "bias":
@@ -265,15 +260,6 @@ def _study_configuration(
                     noise_multiplier=float(
                         random.uniform(*domain.focal_noise_multiplier_range)
                     ),
-                )
-            )
-        else:
-            events.append(
-                NetworkEventConfiguration(
-                    event_id="focal-device-thermal-window",
-                    kind=EventKind.WORLD_FIELD_OFFSET,
-                    start_time_s=domain.event_start_s,
-                    duration_s=domain.event_duration_s,
                 )
             )
     elif scenario == "MIXED_OR_AMBIGUOUS":
@@ -392,8 +378,7 @@ def generate_network_study_episode(
     )
     simulator = NetworkSimulator(configuration)
     domain = FROZEN_NETWORK_DEMO_PROTOCOL.simulation
-    reference_frames = []
-    supervised_frames = []
+    episode_frames = []
     sample_count = int(domain.episode_duration_s * domain.sampling_rate_hz)
     epoch = datetime(2026, 1, 1, tzinfo=timezone.utc)
     for index in range(sample_count):
@@ -408,18 +393,14 @@ def generate_network_study_episode(
         # Only observation frames cross the feature boundary. Truth is
         # intentionally discarded at the simulator boundary.
         observation = buffered.observation
-        if domain.reference_start_s <= sim_time_s < domain.reference_end_s:
-            reference_frames.append(observation)
-        if (
-            domain.supervised_window_start_s
-            <= sim_time_s
-            < domain.supervised_window_end_s
-        ):
-            supervised_frames.append(observation)
+        episode_frames.append(observation)
 
-    reference = build_state8_reference(reference_frames)
-    local = extract_latest_state8_window(
-        supervised_frames,
+    reference_samples = int(
+        domain.reference_end_s * domain.sampling_rate_hz
+    )
+    reference = build_state8_reference(episode_frames[:reference_samples])
+    local = extract_state8_features(
+        episode_frames,
         reference=reference,
         profile_id=LOCAL_STATE8_PROFILE_ID,
         sensor_ids=(plan.focal_sensor_id,),
@@ -445,9 +426,10 @@ def generate_network_study_episode(
         raise RuntimeError("local study extraction must yield the frozen focal window")
     local_record = matching_local[0]
     network_record = None
+    network_records = ()
     if plan.node_count >= 3:
-        network = extract_latest_state8_window(
-            supervised_frames,
+        network = extract_state8_features(
+            episode_frames,
             reference=reference,
             profile_id=NETWORK_STATE8_PROFILE_ID,
             sensor_ids=(plan.focal_sensor_id,),
@@ -474,6 +456,7 @@ def generate_network_study_episode(
                 "network study extraction must yield the frozen focal window"
             )
         network_record = matching_network[0]
+        network_records = network.records
     if not local_record.quality.valid_for_quantum:
         raise RuntimeError("canonical study produced an invalid local feature")
     if network_record is not None and not network_record.quality.valid_for_quantum:
@@ -486,6 +469,8 @@ def generate_network_study_episode(
         focal_sensor_id=plan.focal_sensor_id,
         local_feature=local_record,
         network_feature=network_record,
+        local_replay_features=local.records,
+        network_replay_features=network_records,
     )
     label = NetworkStudyLabel(
         episode_id=plan.episode_id,

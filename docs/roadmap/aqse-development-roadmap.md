@@ -2,253 +2,243 @@
 
 ## Document status
 
-This document is the canonical development sequence for AQSE. It records what
-the repository currently implements, what is being designed, and which future
-increments still require explicit scientific approval. A roadmap entry is not
-authorization to implement it, and the presence of a worksheet, DTO, protocol,
-or placeholder does not make a scientific stage complete.
+This is the canonical implementation roadmap for the AQSE local research
+demonstrator. It separates:
 
-Repository state verified at the start of Milestone 1D:
+1. **decisions** authorised by the completion mandate;
+2. **implemented code** present in the branch;
+3. **measured evidence** recorded only after a command or experiment runs.
 
-- repository: `florianocaprio/AQSE`;
-- current milestone branch: `codex/milestone-1d-tqk-training`;
-- branch HEAD at the approved 1D.3 entry gate:
-  `ab5bff99fa9779a143e236595c0d4c1e78ff349f`;
-- branch HEAD at the approved 1D.4a entry gate:
-  `1b4435b2699066211aa2e9bb8e9cd8cd0b8af82b`;
-- branch HEAD at the approved 1D.4b entry gate:
-  `81045762d69c6a82c63e47196a2ae36899786233`;
-- underlying `main` baseline: `1cb07cdccabf9c655a63f2b23aab37383ae90b69`;
-- `main` and `origin/main` also resolve to `1cb07cdccabf9c655a63f2b23aab37383ae90b69`;
-- the `milestone-1c` tag remains at the peeled commit
+The end-to-end completion mandate supersedes the earlier instruction to stop
+between 1D.5, 1E, 1F and 1G for the explicitly listed v1 scope. It does not
+authorise a merge, scientific-source redesign, historical TEST reopening, or
+claims unsupported by measured evidence.
+
+Repository context:
+
+- working branch: `codex/milestone-1d-tqk-training`;
+- completion-mandate entry HEAD:
+  `67f1de10fcd09a32bafab48d600c05d8f82a0021`;
+- immutable `main` baseline:
+  `1cb07cdccabf9c655a63f2b23aab37383ae90b69`;
+- immutable peeled `milestone-1c` tag:
   `95c5483c0192ba7605713c428e02b2527ab1f919`;
-- commit `1cb07cd` is the post-tag infrastructure reliability patch that
-  separates lightweight health checks from explicitly requested quantum
-  diagnostics. It is part of the 1D branch baseline, but it does not alter the
-  Milestone 1C scientific scope.
+- last pushed completion SHA: **pending final validated push**.
 
-## Milestone sequence and approval status
+## Current completion snapshot
 
-| Milestone | Scope | Verifiable outcome | Status and authority |
+| Area | Authorised decision | Code state | Measured state |
 | --- | --- | --- | --- |
-| **1A** | Author-supplied TQK8 scientific engine | Original 8-qubit VQC, fidelity kernel, alignment loss, numerical derivatives, Fubini--Study metric, and QNG implementation are present with their original tests | **Complete baseline** |
-| **1B** | Initial magnetometer simulator | Scalar finite simulation and the legacy eight-feature harmonic profile are available | **Complete baseline** |
-| **1C** | Vector/network workbench | Causal 1--8-node simulator, observation/truth separation, feature windows, quality/provenance controls, and bounded fixed-theta kernel preview are implemented | **Complete, merged, and tagged** at `95c5483` |
-| **1D** | Controlled datasets and TQK training validation | Reproducible labelled experiments, compatible encoding, bounded training, held-out comparison, checkpoints, and controlled workbench integration | **Current milestone; G5 closed and 1D.4b implemented, awaiting scientific review** |
-| **1E** | Local Functional Embedding / AFSE | A mathematically approved, fixed-size, versioned local representation | **Future and unapproved** |
-| **1F** | Classical model | A frozen classical model consuming the approved AFSE representation | **Future and unapproved** |
-| **1G** | Continuous inference and network analysis | Causal predictions, latency/queue accounting, network-level evaluation, and controlled model promotion | **Future and unapproved** |
+| Historical 1D | Preserve published 1D.1–1D.4b evidence; never reopen its TEST | Existing loaders/results retained | Historical results remain the published record |
+| State8 profiles | Add distinct local/network non-harmonic profiles | Implemented in the working branch | Component/integration evidence belongs in the end-to-end validation record |
+| New study | 160 independent episodes, fixed 96/32/32 split | Generator, typed archive and sealed ledger implemented | Canonical IDs and metrics pending/reported only after `make prepare-demo` |
+| Quantum training | Compare theta0 with at most 10 accepted protected-QNG updates | Protected wrappers and bounded fitting integrated | Selected candidates and actual steps pending canonical preparation |
+| AFSE | Fixed regularised Nyström map, up to 32 TRAIN landmarks | Fitted artifact and immutable query runtime implemented | Dimension/eigenspectrum/OOD observations pending canonical preparation |
+| Classical output | Standardised 32→16 tanh MLP, fixed LBFGS budget | sklearn fit plus safe numeric NumPy runtime implemented | Validation/TEST results pending canonical preparation |
+| Bundle registry | One compatible local/network pair, explicit application | Atomic persisted registry/application implemented | Restart/application acceptance pending final run |
+| Continuous analysis | Observation-only, causal, bounded newest-window scheduling | Worker and status/result API implemented | Eight-node cadence and 600 s soak pending final benchmark |
+| GUI | Retain and complete eight worksheets | Connected views and controls implemented in the working branch | Desktop/narrow browser acceptance pending final run |
 
-Physical sensors, a second sensor technology, noisy or shot-based quantum
-simulation, IBM Runtime, and physical-QPU execution are separate future
-validation tracks. They are not implied by completion of the local simulator.
+“Implemented” above describes executable code, not scientific performance.
+Only [the validation record](../validation/end-to-end-demo.md) may declare an
+experiment or acceptance check passed.
 
-## Milestone 1D increments
+## Dependency-ordered delivery
 
-Milestone 1D is deliberately incremental. Completion of one increment does not
-authorize the next one.
+### 1. Historical evidence preservation
 
-| Increment | Intended content | Exit condition | Current authority |
-| --- | --- | --- | --- |
-| **1D.0** | Scientific contract, compatibility audit, baseline validation, and isolated non-production diagnostic probes | Evidence and open decisions are reviewed; Floriano gives an explicit scientific decision on the proposed task, phase treatment, data independence, budgets, and boundaries | **Completed decision gate** |
-| **1D.1** | Immutable experiment datasets, independent label channel, durable lineage, exclusions, and grouped train/validation/test splits | Deterministic regeneration, replay deduplication, raw-interval isolation, and group isolation are demonstrated | **Approved and canonically frozen as archive v2** |
-| **1D.2** | Approved input encoding and phase policy, fitted-preprocessing boundary, compatibility rules, and baseline preparation | Periodicity, seam continuity, train-only fitting, and incompatible-artifact rejection are demonstrated | **Scientifically approved; Gate G3 closed** |
-| **1D.3** | Bounded training jobs using the unchanged author-supplied QNG implementation | Wrapper equivalence, deterministic trajectory identity, execution-intent idempotence, real accepted-step history, cancellation, bounded concurrency, and resource limits are validated | **Scientifically approved; Gate G4 closed** |
-| **1D.4a** | TRAIN/VALIDATION classical/quantum comparison and model-selection freeze | Method budgets, selected configurations/checkpoints and the later final procedure are immutable before TEST opening | **Scientifically approved; Gate G5 closed** |
-| **1D.4b** | One final held-out evaluation of the frozen selections | Negative and inconclusive results are preserved; TEST is opened only after explicit G5 closure | **Implemented; awaiting scientific review** |
-| **1D.5** | Workbench controls, checkpoint persistence, and explicit application of compatible trained theta | No automatic training or promotion; stale results and downstream invalidation are enforced | **Planned; not authorized** |
-| **1D.6** | Consolidation, regression, local acceptance, and external review | Full validation passes and a separately authorized review/merge decision is made | **Planned; not authorized** |
+Milestones 1A–1D.4b remain regression baselines:
 
-Through 1D.3 one explicit, bounded TRAIN-only job endpoint and one designated
-immutable candidate-theta trajectory exist. A deterministic scientific
-trajectory identity maps the designated execution and the retained accidental
-non-canonical duplicate without rewriting either artifact. Durable versioned
-execution intents prevent replay from starting a second worker. Milestone
-1D.4a now adds an immutable, predeclared TRAIN/VALIDATION comparison and freezes
-one configuration per approved method plus the later final-evaluation
-procedure. Milestone 1D.4b now adds the single authorized held-out evaluation:
-24/24 TEST lineages were eligible, the ledger records exactly two semantic
-loads, and no result changed the freeze. There is still no active or promoted
-model, AFSE mathematics, classical/neural production model, GUI training
-control or automatic checkpoint application. The selected configurations are
-not connected to the Milestone 1C preview.
+- author-supplied VQC/TQK, loss, numerical derivatives, Fubini–Study metric and
+  QNG sources stay byte-identical;
+- historical dataset/result artifacts remain outside Git;
+- the historical TEST ledger is verified opaquely against
+  `e0d4898141d8be07f4a4f1af7582791eae61994ced52bb7b3dba30a7ddda4b70`;
+- no new AFSE, neural or network-task choice is justified with the consumed
+  historical TEST.
 
-## Training and inference are separate paths
+### 2. Observable State8 prerequisite
 
-### Controlled training path
+Two incompatible feature profiles serve the real live task:
 
-```text
-labelled training observations
-        -> causal feature extraction
-        -> training-fitted encoding/scaler
-        -> VQC(theta)
-        -> TQK Gram matrix
-        -> centred-alignment loss
-        -> supplied QNG optimizer
-        -> immutable candidate-theta run artifact
-```
+- `aqse.local-state8.v1`;
+- `aqse.network-state8.v1`.
 
-Labels are inputs to the training objective only. Truth, simulator seeds,
-scenario names, hidden fault state, and future samples do not enter feature
-extraction, encoding, or the VQC as predictor inputs. QNG updates theta; it does
-not label samples, tune sensor hardware, or form an inference layer.
+Both use 100 Hz measurements, an explicit observed reference over the first
+8 s, 4 s causal windows and a 1 s hop. They retain missing observations,
+per-feature validity and quality flags. The local profile supports N=1 and
+fallback operation. The network profile requires at least three comparable
+aligned nodes and uses a leave-one-out peer median. N=2 remains explicitly
+ambiguous.
 
-### Frozen inference path
+The historical harmonic profile and `aqse.tqk8.encoding.phase-direct.v1`
+remain separate compatibility domains. State8 applies the protected
+`AngleScaler` to all eight real-valued coordinates under
+`aqse.state8.angle-scaler-all8.v1`.
 
-```text
-measured observation
-        -> frozen causal feature profile
-        -> frozen compatible encoding/scaler
-        -> frozen VQC(theta*) and TQK
-        -> future approved AFSE representation
-        -> future frozen classical model
-        -> prediction with lineage and validity status
-```
+### 3. Bounded network demonstration study
 
-The current Milestone 1C path stops at an explicit fixed-theta fidelity-kernel
-preview. A Gram matrix is relational batch geometry, not AFSE, and the existing
-demonstration SVC is a possible research evaluator rather than the final AQSE
-classical model. The implemented 1D.3 output is a versioned candidate-theta run
-artifact, not a fabricated local embedding or deployed prediction.
+The frozen study is `aqse-network-demo-v1`:
 
-## Proposed first 1D experiment
+- four scenario strata: `NORMAL`, `ENVIRONMENT_COMPATIBLE`,
+  `DEVICE_COMPATIBLE`, `MIXED_OR_AMBIGUOUS`;
+- node counts 1 through 8;
+- five independent episodes per scenario/node-count cell;
+- three TRAIN, one VALIDATION and one TEST per cell, assigned before
+  simulation: 96/32/32;
+- 28 s at 100 Hz; reference `[0,8)`; one predeclared focal-node example at
+  `[18,22)`;
+- separate physical observation and label files;
+- episode/lineage grouping prevents peer nodes, replays or correlated variants
+  from crossing partitions;
+- fixed seeds 2001001–2001006 and canonical generation separator
+  `aqse-network-demo-v1/canonical-generation/v3`;
+- the environmental dipole and focal thermal ramp are scheduled physical
+  interventions on `[14,24)`, with pre-onset reference/replay remaining
+  unperturbed by those sources.
 
-The leading proposal for scientific approval is a narrow binary experiment:
-discriminate nominal versus elevated simulated device-noise conditions under a
-controlled harmonic excitation, using labels `-1` and `+1` generated separately
-from declared simulator interventions.
+No hidden intervention, scenario name, random seed, fault truth or future
+sample enters predictive input.
 
-This would validate the dataset, training, and comparison machinery. It would
-not prove universal environmental-versus-instrumental diagnosis or quantum
-advantage. Amplitude, frequency, phase, temperature, and other nuisances must
-vary independently of class within a declared domain. An observationally
-equivalent physical-versus-instrumental counterexample must be retained as a
-negative control: identical predictive observations must produce identical
-features, kernels, and predictions even when hidden truth labels differ.
+### 4. Frozen representation and downstream model
 
-The proposal, label semantics, signal/noise ranges, eligibility policy, and
-comparison budget remain decisions for the 1D.0 approval gate. The candidate
-continuous-network relational feature profile must not be silently activated to
-make the task easier.
+Each local/network task compares only:
 
-## Scientific and compatibility rules
+- deterministic `theta0`;
+- one candidate from at most ten accepted calls to the unchanged protected
+  QNG wrapper.
 
-### Protected scientific contract
+The binary protected alignment loss receives only compatible -1/+1 targets.
+The network QNG subtask excludes NORMAL and MIXED/AMBIGUOUS examples; the
+four-class downstream model may use every eligible TRAIN class.
 
-- Preserve the author-supplied `tqk8.py`, `sampler_qng.py`, original quantum
-  tests, fixtures, notebooks, and scientific artifacts byte-for-byte unless
-  Floriano explicitly authorizes a scientific change.
-- Preserve the actual TQK8 contract: eight ordered inputs, eight qubits,
-  sixteen theta parameters, seven CZ gates, RY upload and later RZ re-upload,
-  fidelity kernel, centred-alignment loss, empirical Fubini--Study metric, and
-  the existing QNG step semantics.
-- Reuse the supplied loss, gradient/metric, and QNG implementation through an
-  application wrapper. Do not reconstruct or silently replace the mathematics.
-- Preserve the validated sensor-response order, noise/filter/clipping order,
-  deterministic random streams, SI-unit boundaries, causal acquisition,
-  replay semantics, and strict observation/truth separation.
+For each candidate, the branch fits:
 
-### Versioned compatibility tuple
+1. a TRAIN-only State8 encoder;
+2. `aqse.afse.nystrom-ridge32.v1` with distinct balanced TRAIN landmarks,
+   ridge `1e-6`, immutable ordered basis and TRAIN-residual p99 heuristic OOD
+   gate;
+3. `aqse.classical.mlp-32x16-tanh-lbfgs.v1`, with TRAIN-only
+   standardisation, hidden layers 32/16, tanh, LBFGS, alpha `1e-3`,
+   `max_iter=500`, `max_fun=15000`, seed 2001005;
+4. the same compact MLP on the same raw State8 inputs as a classical baseline.
 
-Every dataset, trained kernel, representation, and model must record enough
-lineage to reject incompatible combinations. At minimum this includes:
+Model selection is VALIDATION balanced accuracy, then macro-F1, then theta0 on
+a tie. The selected theta, encoder, AFSE, output scaler and classifier form one
+immutable bundle. TEST cannot change the selection.
 
-```text
-full_git_sha
-observation_schema_version + physical_units
-calibration_and_pose_provenance
-dataset_id + generative_lineage_id + split_policy_version
-feature_profile_id + extractor_version + feature_order
-encoding_policy_id
-scaler_id + scaler_snapshot + fitting_dataset_id
-vqc_tqk_source_hashes + quantum_backend_semantics
-theta_version + initial/final/selected_theta
-reference_dataset_or_bank_id
-future_afse_method_and_version
-future_downstream_model_version
-```
+### 5. Continuous operation and controlled promotion
 
-Missing or incompatible fields make an artifact stale; components must not be
-silently combined. In particular:
+The live path consumes `ObservationFrame` only, freezes one session reference,
+extracts the newest complete causal window, executes the compatible bundle and
+publishes:
 
-- the implemented feature order remains
-  `[amplitude, phase, frequency, variance, drift, snr, spectral_peak, temperature]`;
-- length eight alone does not make different feature profiles compatible;
-- scaling and reference-bank fitting use training data only;
-- query batch membership or order must not refit or change frozen inference;
-- deterministic replays, overlapping windows, synchronized sensors, and paired
-  variants sharing one generative realization remain in the same data split;
-- changing a feature profile, phase policy, scaler, theta, VQC/TQK semantics,
-  reference bank, AFSE method, or downstream model creates a new incompatible
-  version and invalidates dependent cached artifacts;
-- datasets and checkpoints are generated artifacts and remain outside Git.
+- profile, bundle, theta, reference and application identities;
+- sensor/peer/context identities and window interval;
+- feature values, units, validity and quality flags;
+- encoded angles and fixed AFSE coordinates when eligible;
+- reconstruction residual and heuristic OOD flag;
+- uncalibrated class scores, displayed class and raw-feature baseline;
+- processing time, result age, p50/p95 latency, skipped windows and bounded
+  queue depth.
 
-### Phase-policy boundary
+The worker never trains. During explicit training it yields the shared heavy
+slot, leaves acquisition running and reports a paused/busy state rather than
+building a backlog.
 
-The legacy preview retains the unchanged `AngleScaler` behavior. The approved
-offline 1D.2 policy retains the original scaler outputs for seven columns and replaces
-the encoded phase column with a canonically wrapped observed phase in
-`[-pi, pi)`. It is versioned as `aqse.tqk8.encoding.phase-direct.v1`; actual
-NumPy/Qiskit state and kernel tests demonstrate periodicity, seam continuity
-and cross-engine agreement at absolute tolerance `1e-12`. It does not overwrite
-legacy semantics or add a ninth quantum input.
+Training jobs use durable intent identity, one bounded worker, real accepted
+step history and cancellation. Completion creates saved candidates but does
+not promote them. The user applies a selection-freeze-compatible local/network
+pair explicitly and atomically; caches and pending results are invalidated
+together.
 
-## Stage gates
+### 6. Workbench and delivery
 
-| Gate | Required evidence or decision | What remains blocked |
+The existing eight worksheets now have the following target state:
+
+| Worksheet | End-to-end responsibility |
+| --- | --- |
+| Overview | service/session/analysis state, active bundle, live quality and age |
+| Sensors | 1–8 node configuration, lifecycle, observed plots and explicit live events |
+| Features | live State8 values/reference/context plus separate legacy harmonic workflow |
+| Quantum Engine | protected circuit metadata, frozen live theta and isolated manual preview |
+| QNG Training | bounded Train/Cancel/status/history and explicit Apply |
+| Local Embedding / AFSE | fitted method, dimension, residual/OOD and live z(x) |
+| Neural Model | architecture, real scores, uncertainty gates and raw baseline |
+| Experiments | read-only study/results/registry, exports and compatible application |
+
+Final acceptance must exercise real backend state at 1440×900 and 390×844,
+restart persistence, invalid bundle rejection and a ten-minute eight-node soak.
+Screenshots and reports remain outside Git.
+
+## Delivery gates
+
+| Gate | Condition | Current state |
 | --- | --- | --- |
-| **G0 — 1D.0 entry** | Clean dedicated branch, verified baseline/tag distinction, protected hashes, and existing baseline validation | All production training work |
-| **G1 — scientific approval** | Floriano explicitly approves the first task, labels, observational limits, phase policy direction, provenance strategy, and resource budgets after reviewing 1D.0 evidence | 1D.1--1D.6 |
-| **G2 — dataset freeze** | Dataset manifest, independent labels, grouped splits, duplicate/raw-overlap checks, eligibility reporting, and sealed test policy pass review | Production encoding and optimization |
-| **G3 — representation compatibility** | Approved encoding is periodic where required, fitted on training only, versioned, and rejects incompatible artifacts | Training jobs and checkpoints |
-| **G4 — bounded training** | Unchanged QNG wrapper equivalence, deterministic trajectory identity, execution-intent idempotence, concurrency/cancellation behavior, deterministic initialization, actual history, and real-load compute/memory/responsiveness limits are validated | Evaluation claims and UI application |
-| **G5 — model selection freeze** | Classical and quantum comparisons use matched information and declared budgets; validation selects the checkpoint before the test set is opened | **Closed before the single 1D.4b held-out evaluation; model promotion remains blocked** |
-| **G6 — controlled integration** | Explicit checkpoint application, stale-result invalidation, artifact lineage, simulator responsiveness, and honest UI labels are validated | Release or merge |
-| **G7 — external acceptance** | Full regression, local build, manual acceptance, external scientific/code review, and separate merge authorization | Merge into `main`, release, or subsequent milestone |
+| E2E-1 contract | design freeze recorded before canonical study evaluation | Recorded |
+| E2E-2 implementation | State8, study, AFSE, MLP, bundles, worker, APIs and GUI connected | Implemented in working branch; full regression pending |
+| E2E-3 scientific run | TRAIN fit, VALIDATION freeze, exactly one new TEST evaluation persisted | Pending/reported in validation record |
+| E2E-4 operational | services healthy, browser routes pass, persistence/replay/application verified | Pending/reported in validation record |
+| E2E-5 soak | eight nodes, 600 s real wall time, bounded queue/memory/latency report | Pending/reported in validation record |
+| E2E-6 review | branch pushed clean, local/remote aligned, external manual acceptance | Pending |
 
-No acceptance gate requires QNG or the quantum kernel to outperform a classical
-baseline. Negative or inconclusive results are valid scientific outcomes.
+No gate requires the quantum/AFSE model to beat the classical baseline.
+Negative, tied or weak predictive results close the bounded experiment when
+reported honestly; they do not authorise an undeclared tuning loop.
+
+## Remaining acceptance work
+
+The work is not a final release until the validation record contains actual
+evidence for:
+
+- complete backend and frontend test/lint/typecheck/build suites;
+- protected-source hashes and historical TEST-ledger identity;
+- `make build`, `make prepare-demo`, `make demo`, `make acceptance`;
+- service health and representative REST operations;
+- classification metrics, supports, confusion, coverage and uncertainty for
+  the one frozen new-study evaluation;
+- 1/2/4/8-node live scenarios, quality abstentions, explicit events,
+  training/cancellation/idempotency and atomic application;
+- backend/frontend restart with saved-bundle reload;
+- desktop and narrow browser screenshots;
+- 600 s real-wall-clock soak with RSS, queue, skip and latency observations;
+- `git diff --check`, clean final status and local/remote SHA equality.
+
+## Compatibility and scientific protection
+
+A deployable bundle binds task, profile/fingerprint, units/reference policy,
+TRAIN-fitted encoder, exact protected-source identities, theta, TQK semantics,
+AFSE landmarks/B/ridge, MLP parameters/class order and measured provenance.
+Mismatched parts are rejected; query acquisition identity never masquerades as
+the fitting dataset identity.
+
+The following remain outside the completion mandate:
+
+- changing the author's circuit, kernel, alignment loss or QNG mathematics;
+- QPU, shots/noise-model research or entangled sensor networks;
+- hardware/calibrated sensitivity claims;
+- inverse dipole localization or geographic recognition;
+- automatic labels, model self-training, continual learning, AFSE refits or
+  hidden promotion;
+- cloud services, database, queue, API key or credential requirements.
 
 ## Git and review workflow
 
-1. Use `codex/milestone-1d-tqk-training` for all separately authorized 1D
-   increments. Its verified starting point includes infrastructure commit
-   `1cb07cd`; do not move the `milestone-1c` tag from `95c5483`.
-2. Begin each increment from a clean working tree, inspect ancestry and remote
-   state, and isolate only that increment's intentional files.
-3. Run the relevant backend, frontend, lint, typecheck, build, scientific
-   regression, hash, and `git diff --check` validations before any commit.
-4. Commit and push one reviewable increment only after that increment has been
-   explicitly authorized and validated. Use a normal fast-forward push.
-5. Do not rebase or rewrite published history, amend published commits,
-   force-push, move tags, merge into `main`, create a release, or open a pull
-   request without separate authorization.
-6. Keep secrets, `.env` files, generated datasets/checkpoints, runtime files,
-   caches, logs, ZIP archives, temporary probes, and build artifacts out of
-   Git.
-7. Completion of each authorized increment ends at its review gate. Work must
-   stop before the next increment until Floriano explicitly authorizes it.
+All completion work remains on `codex/milestone-1d-tqk-training`. Validated
+increments may be committed and normally pushed. Do not rebase, amend
+published history, force-push, move tags, open a pull request, merge into
+`main`, or create a release without Floriano's later explicit instruction.
 
-The final milestone workflow remains: push the reviewed branch, external code
-and scientific review, local build, manual acceptance, and only then a
-separately authorized merge. A successful test run never implies automatic
-promotion.
+Generated studies, bundles, ledgers, reports, screenshots, `.env`, caches,
+logs, ZIP files, `node_modules` and build outputs stay outside Git.
 
-## Related contracts
+## Related documents
 
-- [Milestone 1D scientific training plan](../training/milestone-1d-scientific-plan.md)
-- [Milestone 1D.2 phase-direct encoding](../training/milestone-1d-2-encoding.md)
-- [Milestone 1D.2 validation record](../validation/milestone-1d-2-encoding.md)
-- [Milestone 1D.3 bounded QNG training](../training/milestone-1d-3-qng-training.md)
-- [Milestone 1D.3 validation record](../validation/milestone-1d-3-qng-training.md)
-- [Milestone 1D.4a comparative evaluation](../training/milestone-1d-4a-comparative-evaluation.md)
-- [Milestone 1D.4a validation record](../validation/milestone-1d-4a-comparative-evaluation.md)
-- [Milestone 1D.4b final held-out evaluation](../training/milestone-1d-4b-held-out-evaluation.md)
-- [Milestone 1D.4b validation record](../validation/milestone-1d-4b-held-out-evaluation.md)
-- [Milestone 1D.0 design and compatibility audit](../validation/milestone-1d-design-audit.md)
+- [Final delivery status](../final-delivery.md)
+- [Operator guide](../user-guide.md)
+- [Detailed end-to-end validation](../validation/end-to-end-demo.md)
 - [Canonical AQSE pipeline](../architecture/canonical-aqse-pipeline.md)
 - [Scientific scope and limitations](../architecture/scientific-scope-and-limitations.md)
 - [Feature profiles and quality](../features/feature-profiles-and-quality.md)
-- [Quantum preview contract](../quantum/quantum-preview-contract.md)
 - [AFSE boundary](../quantum/afse-boundary.md)
-- [Milestone 1C validation record](../validation/milestone-1c.md)
+- [Historical 1D.4b evaluation](../validation/milestone-1d-4b-held-out-evaluation.md)

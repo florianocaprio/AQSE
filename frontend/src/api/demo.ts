@@ -3,6 +3,11 @@ import type {
   DemoAnalysisView,
   DemoRegistryView,
   DemoTrainingJobView,
+  KnowledgeCaptureResponse,
+  KnowledgeCollectionResponse,
+  KnowledgeLabelResponse,
+  KnowledgeRegistryView,
+  KnowledgeTask,
 } from "../types/demo";
 import { requestJson } from "./client";
 
@@ -10,6 +15,64 @@ const DEMO_BASE = "/api/demo";
 
 export function getDemoRegistry(signal?: AbortSignal): Promise<DemoRegistryView> {
   return requestJson<DemoRegistryView>(`${DEMO_BASE}/registry`, { signal });
+}
+
+export function getDemoKnowledge(
+  signal?: AbortSignal,
+): Promise<KnowledgeRegistryView> {
+  return requestJson<KnowledgeRegistryView>(`${DEMO_BASE}/knowledge`, { signal });
+}
+
+export function captureDemoKnowledgeObservation(
+  request: {
+    schema_version: "aqse.network-demo.knowledge-capture-request.v1";
+    session_id: string;
+    sensor_id: string;
+    task: KnowledgeTask;
+  },
+  signal?: AbortSignal,
+): Promise<KnowledgeCaptureResponse> {
+  return requestJson<KnowledgeCaptureResponse>(`${DEMO_BASE}/knowledge/observations`, {
+    method: "POST",
+    body: request,
+    signal,
+  });
+}
+
+export function addDemoKnowledgeLabel(
+  request: {
+    schema_version: "aqse.network-demo.reviewed-label-request.v1";
+    observation_id: string;
+    task: KnowledgeTask;
+    label: string;
+    reviewer_id: string;
+    reviewed_at_utc: string;
+  },
+  signal?: AbortSignal,
+): Promise<KnowledgeLabelResponse> {
+  return requestJson<KnowledgeLabelResponse>(`${DEMO_BASE}/knowledge/labels`, {
+    method: "POST",
+    body: request,
+    signal,
+  });
+}
+
+export function approveDemoTrainCollection(
+  request: {
+    schema_version: "aqse.network-demo.train-approval-request.v1";
+    partition: "TRAIN";
+    task: KnowledgeTask;
+    observation_ids: string[];
+    approved_by: string;
+    approved_at_utc: string;
+    approval_declaration: "explicitly approved for bounded TRAIN-only retraining";
+  },
+  signal?: AbortSignal,
+): Promise<KnowledgeCollectionResponse> {
+  return requestJson<KnowledgeCollectionResponse>(
+    `${DEMO_BASE}/knowledge/train-collections`,
+    { method: "POST", body: request, signal },
+  );
 }
 
 export function startDemoAnalysis(
@@ -60,6 +123,8 @@ export function startDemoTraining(
     intent_id: string;
     study_artifact_id: string;
     requested_action: "fit-two-candidate-local-and-network-bundles";
+    local_train_collection_id?: string;
+    network_train_collection_id?: string;
   },
   signal?: AbortSignal,
 ): Promise<DemoTrainingJobView> {

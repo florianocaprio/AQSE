@@ -43,7 +43,7 @@ export type DemoState = {
   active_training_request_id: string | null;
 };
 
-type DemoAction =
+export type DemoAction =
   | { type: "REGISTRY_REQUEST"; request_id: string }
   | { type: "REGISTRY_READY"; request_id: string; registry: DemoRegistryView }
   | { type: "REGISTRY_FAILED"; request_id: string; message: string }
@@ -56,7 +56,7 @@ type DemoAction =
   | { type: "TRAINING_READY"; request_id: string; training: DemoTrainingJobView }
   | { type: "TRAINING_FAILED"; request_id: string; message: string };
 
-const initialDemoState: DemoState = {
+export const initialDemoState: DemoState = {
   registry: null,
   analysis: null,
   training: null,
@@ -71,7 +71,7 @@ const initialDemoState: DemoState = {
   active_training_request_id: null,
 };
 
-function reducer(state: DemoState, action: DemoAction): DemoState {
+export function demoReducer(state: DemoState, action: DemoAction): DemoState {
   switch (action.type) {
     case "REGISTRY_REQUEST":
       return {
@@ -113,7 +113,12 @@ function reducer(state: DemoState, action: DemoAction): DemoState {
     case "ANALYSIS_POLL_READY":
       if (
         state.analysis?.session_id !== action.analysis.session_id ||
-        action.analysis.worker_epoch < state.analysis.worker_epoch
+        action.analysis.worker_epoch < state.analysis.worker_epoch ||
+        (
+          action.analysis.worker_epoch === state.analysis.worker_epoch
+          && action.analysis.latest_observation_frame_id
+            < state.analysis.latest_observation_frame_id
+        )
       ) {
         return state;
       }
@@ -168,7 +173,10 @@ type DemoContextValue = {
   refreshRegistry: () => Promise<void>;
   startAnalysis: (sessionId: string) => Promise<void>;
   stopAnalysis: (sessionId: string) => Promise<void>;
-  startTraining: () => Promise<void>;
+  startTraining: (collections?: {
+    local_train_collection_id: string;
+    network_train_collection_id: string;
+  }) => Promise<void>;
   cancelTraining: () => Promise<void>;
   applyBundlePair: (
     localBundleId: string,
@@ -183,7 +191,7 @@ type DemoContextValue = {
 const DemoContext = createContext<DemoContextValue | null>(null);
 
 export function DemoProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialDemoState);
+  const [state, dispatch] = useReducer(demoReducer, initialDemoState);
   const registrySequence = useRef(0);
   const analysisSequence = useRef(0);
   const trainingSequence = useRef(0);
@@ -262,7 +270,10 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const startTraining = useCallback(async () => {
+  const startTraining = useCallback(async (collections?: {
+    local_train_collection_id: string;
+    network_train_collection_id: string;
+  }) => {
     const studyId = state.registry?.study_artifact_id;
     if (!studyId) {
       const requestId = requestIdentity("training", ++trainingSequence.current);
@@ -284,6 +295,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
         intent_id: currentIntentId.current,
         study_artifact_id: studyId,
         requested_action: "fit-two-candidate-local-and-network-bundles",
+        ...collections,
       });
       dispatch({ type: "TRAINING_READY", request_id: requestId, training });
     } catch (error: unknown) {

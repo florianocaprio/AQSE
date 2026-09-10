@@ -68,6 +68,11 @@ def _partition(
         for row_index in range(rows_per_class):
             ordinal = ordinal_offset + (class_index * rows_per_class) + row_index
             features = generator.normal(center, 0.12, size=8)
+            # Preserve the physical State8 domains used by the observable rule:
+            # dispersion and the network spatial residual are non-negative.
+            features[1] = abs(features[1])
+            if not local:
+                features[5] = abs(features[5])
             examples.append(
                 DemoTaskExample(
                     sample_id=f"{task_id}-{partition}-{ordinal:03d}",

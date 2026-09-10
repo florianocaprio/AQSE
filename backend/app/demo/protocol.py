@@ -16,7 +16,7 @@ ScenarioName = Literal[
 ]
 
 STUDY_ID = "aqse-network-demo-v1"
-STUDY_SCHEMA_VERSION = "aqse.network-demo.protocol.v1"
+STUDY_SCHEMA_VERSION = "aqse.network-demo.protocol.v2"
 SCENARIOS: tuple[ScenarioName, ...] = (
     "NORMAL",
     "ENVIRONMENT_COMPATIBLE",
@@ -97,15 +97,32 @@ class NeuralPolicy(FrozenModel):
     top_two_margin_threshold: Literal[0.15] = 0.15
 
 
+class EvaluationPolicy(FrozenModel):
+    primary_reporting_unit: Literal["independent_episode_focal_node"] = (
+        "independent_episode_focal_node"
+    )
+    replay_window_starts_s: tuple[int, ...] = tuple(range(8, 25))
+    replay_metric_policy: Literal[
+        "normal-false-positive-and-first-post-onset-operational-change"
+    ] = "normal-false-positive-and-first-post-onset-operational-change"
+    observable_rule_policy: Literal[
+        "train-normal-p99-absolute-mean-dispersion-slope-and-network-residual"
+    ] = "train-normal-p99-absolute-mean-dispersion-slope-and-network-residual"
+    paired_comparison: Literal[
+        "quantum-afse-vs-same-architecture-raw-state8"
+    ] = "quantum-afse-vs-same-architecture-raw-state8"
+    paired_bootstrap_replicates: Literal[1000] = 1_000
+
+
 class NetworkDemoProtocol(FrozenModel):
-    schema_version: Literal["aqse.network-demo.protocol.v1"] = STUDY_SCHEMA_VERSION
+    schema_version: Literal["aqse.network-demo.protocol.v2"] = STUDY_SCHEMA_VERSION
     study_id: Literal["aqse-network-demo-v1"] = STUDY_ID
     scientific_label: Literal["research / not validated for field deployment"] = (
         "research / not validated for field deployment"
     )
     generation_domain_separator: Literal[
-        "aqse-network-demo-v1/canonical-generation/v2"
-    ] = "aqse-network-demo-v1/canonical-generation/v2"
+        "aqse-network-demo-v1/canonical-generation/v3"
+    ] = "aqse-network-demo-v1/canonical-generation/v3"
     scenarios: tuple[ScenarioName, ...] = SCENARIOS
     node_counts: tuple[int, ...] = NODE_COUNTS
     replicates_per_cell: Literal[5] = REPLICATES_PER_CELL
@@ -118,7 +135,12 @@ class NetworkDemoProtocol(FrozenModel):
     normal_event_policy: Literal["zero-amplitude-sham-on-common-schedule"] = (
         "zero-amplitude-sham-on-common-schedule"
     )
-    environment_policy: Literal["moving-spatial-dipole"] = "moving-spatial-dipole"
+    environment_policy: Literal["scheduled-moving-spatial-dipole"] = (
+        "scheduled-moving-spatial-dipole"
+    )
+    thermal_driver_policy: Literal["scheduled-ramp-on-common-event-window"] = (
+        "scheduled-ramp-on-common-event-window"
+    )
     device_modes_by_replicate: tuple[str, ...] = (
         "bias",
         "drift",
@@ -145,6 +167,7 @@ class NetworkDemoProtocol(FrozenModel):
     quantum: QuantumStudyBudget = Field(default_factory=QuantumStudyBudget)
     afse: AfsePolicy = Field(default_factory=AfsePolicy)
     neural: NeuralPolicy = Field(default_factory=NeuralPolicy)
+    evaluation: EvaluationPolicy = Field(default_factory=EvaluationPolicy)
     selection_rule: tuple[str, ...] = (
         "maximum_validation_balanced_accuracy",
         "maximum_validation_macro_f1",

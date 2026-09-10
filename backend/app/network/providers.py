@@ -62,8 +62,21 @@ def dipole_position_m(
     source: DipoleSourceConfiguration,
     sim_time_s: float,
 ) -> NDArray[np.float64]:
-    return _vector(source.initial_position_m) + sim_time_s * _vector(
+    elapsed_s = max(0.0, sim_time_s - source.active_start_time_s)
+    return _vector(source.initial_position_m) + elapsed_s * _vector(
         source.velocity_m_per_s
+    )
+
+
+def _dipole_is_active(
+    source: DipoleSourceConfiguration,
+    sim_time_s: float,
+) -> bool:
+    if not source.enabled or sim_time_s < source.active_start_time_s:
+        return False
+    return (
+        source.active_duration_s is None
+        or sim_time_s < source.active_start_time_s + source.active_duration_s
     )
 
 
@@ -164,7 +177,7 @@ class SyntheticSpatialFieldProvider:
             start=np.zeros(3, dtype=np.float64),
         )
         for source in self._configuration.dipoles:
-            if not source.enabled:
+            if not _dipole_is_active(source, sim_time_s):
                 continue
             try:
                 dipole_total += point_dipole_field_T(

@@ -146,6 +146,7 @@ describe("network configuration import", () => {
           saturation_limits_T: [100e-6, 200e-6, 300e-6],
           temperature_driver: {
             kind: "sinusoidal",
+            start_time_s: 2,
             ramp_rate_K_per_s: 0,
             ramp_duration_s: 1,
             sinusoidal_amplitude_K: 2,

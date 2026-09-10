@@ -28,6 +28,7 @@ from app.demo.bundle_storage import (
 from app.demo.evaluation import (
     DemoTrainingCancelled,
     assemble_task_partition,
+    evaluate_bundle_evidence,
     evaluate_frozen_test,
     fit_demo_task_candidates,
     freeze_model_selection,
@@ -37,7 +38,10 @@ from app.demo.runtime import bundle_runtime_cache
 from app.demo.runtime_models import (
     DemoBundleSummary,
     DemoMetricSummary,
+    DemoNodeCountSummary,
     DemoRegistryView,
+    DemoReplaySummary,
+    DemoSelectionFreezeSummary,
 )
 from app.demo.study import build_network_study
 from app.demo.study_models import (
@@ -175,6 +179,96 @@ def load_task_partitions(
     )
 
 
+def _validated_selected_bundles(
+    study_path: Path,
+    manifest: NetworkStudyManifest,
+    freeze: DemoModelSelectionFreeze,
+    *,
+    root: Path | None = None,
+) -> dict[str, DemoResearchBundle]:
+    """Reload and replay selected bundles on VALIDATION before TEST is opened."""
+
+    if (
+        freeze.study_artifact_id != manifest.artifact_id
+        or freeze.study_content_digest != manifest.content_digest
+        or freeze.protocol_digest != manifest.protocol_digest
+        or freeze.protocol_digest != FROZEN_NETWORK_DEMO_PROTOCOL.digest
+    ):
+        raise RuntimeError("selection freeze is not bound to the immutable demo study")
+    bundles_by_id = {bundle.bundle_id: bundle for bundle in list_bundles(root=root)}
+    local_validation, network_validation = load_task_partitions(
+        study_path,
+        manifest,
+        "validation",
+    )
+    for selection, partition in zip(
+        freeze.selections,
+        (local_validation, network_validation),
+        strict=True,
+    ):
+        bundle = bundles_by_id.get(selection.selected_bundle_id)
+        if bundle is None:
+            raise RuntimeError("selected bundle is missing before TEST access")
+        if (
+            bundle.task_id != selection.task_id
+            or bundle.study_artifact_id != freeze.study_artifact_id
+            or bundle.study_content_digest != freeze.study_content_digest
+            or bundle.protocol_digest != freeze.protocol_digest
+        ):
+            raise RuntimeError("selected bundle is not bound to its selection freeze")
+        replayed, replayed_raw, replayed_comparison = evaluate_bundle_evidence(
+            bundle,
+            partition,
+            query_acquisition_id=(
+                f"{manifest.artifact_id}:pre-test-validation-replay"
+            ),
+        )
+        if (
+            replayed != bundle.validation_metrics
+            or replayed_raw != bundle.raw_baseline_validation_metrics
+            or replayed_comparison != bundle.validation_comparison
+        ):
+            raise RuntimeError(
+                "selected bundle no longer reproduces its complete frozen "
+                "VALIDATION evidence"
+            )
+    return bundles_by_id
+
+
+def _validate_final_and_ledger(
+    study_path: Path,
+    manifest: NetworkStudyManifest,
+    freeze: DemoModelSelectionFreeze,
+    final: DemoFinalEvaluation,
+) -> None:
+    """Validate persisted TEST metadata without reopening either TEST channel."""
+
+    expected_query_id = (
+        f"{manifest.artifact_id}:single-frozen-test-evaluation"
+    )
+    if (
+        final.freeze_id != freeze.freeze_id
+        or final.study_artifact_id != manifest.artifact_id
+        or final.study_content_digest != manifest.content_digest
+        or final.query_acquisition_id != expected_query_id
+    ):
+        raise RuntimeError(
+            "final evaluation is not bound to the immutable study and selection freeze"
+        )
+    ledger = read_demo_test_ledger(study_path)
+    if (
+        len(ledger) != 3
+        or tuple(item.sequence for item in ledger) != (0, 1, 2)
+        or any(
+            item.selection_freeze_id != freeze.freeze_id
+            for item in ledger[1:]
+        )
+    ):
+        raise RuntimeError(
+            "final evaluation does not have the complete matching TEST access ledger"
+        )
+
+
 def prepare_demo(
     *,
     root: Path | None = None,
@@ -232,6 +326,13 @@ def prepare_demo(
     else:
         report(f"Reusing selection freeze {freeze.freeze_id}.")
 
+    report("Reloading selected bundles and replaying frozen VALIDATION evidence.")
+    bundles_by_id = _validated_selected_bundles(
+        study_path,
+        manifest,
+        freeze,
+        root=root,
+    )
     final = _current_final_evaluation(freeze.freeze_id, root=root)
     if final is None:
         ledger = read_demo_test_ledger(study_path)
@@ -265,9 +366,6 @@ def prepare_demo(
             study_artifact_id=manifest.artifact_id,
             study_content_digest=manifest.content_digest,
         )
-        bundles_by_id = {
-            bundle.bundle_id: bundle for bundle in list_bundles(root=root)
-        }
         final = evaluate_frozen_test(
             freeze,
             bundles_by_id,
@@ -281,6 +379,8 @@ def prepare_demo(
         report(f"Single TEST evaluation persisted as {final.evaluation_id}.")
     else:
         report(f"Reusing final evaluation {final.evaluation_id}; TEST not reopened.")
+
+    _validate_final_and_ledger(study_path, manifest, freeze, final)
 
     apply_selection_freeze(freeze, root=root)
     bundle_runtime_cache.invalidate()
@@ -299,18 +399,72 @@ def _metric_summary(metric: DemoEvaluationMetrics) -> DemoMetricSummary:
     return DemoMetricSummary(
         partition=metric.partition,
         task_id=metric.task_id,
+        profile_id=metric.profile_id,
         balanced_accuracy=metric.balanced_accuracy,
         macro_f1=metric.macro_f1,
         coverage=metric.coverage,
         sample_count=metric.sample_count,
+        eligible_count=metric.eligible_count,
+        class_support=metric.class_support,
+        class_recall=metric.class_recall,
         uncertain_count=metric.uncertain_count,
         heuristic_ood_count=metric.heuristic_ood_count,
+        by_node_count=tuple(
+            DemoNodeCountSummary(
+                node_count=item.node_count,
+                sample_count=item.sample_count,
+                eligible_count=item.eligible_count,
+                class_support=item.class_support,
+                balanced_accuracy=item.balanced_accuracy,
+                macro_f1=item.macro_f1,
+                coverage=item.coverage,
+            )
+            for item in metric.by_node_count
+        ),
+        replay=(
+            None
+            if metric.replay is None
+            else DemoReplaySummary(
+                episode_count=metric.replay.episode_count,
+                window_count=metric.replay.window_count,
+                false_positive_episode_rate=(
+                    metric.replay.false_positive_episode_rate
+                ),
+                false_positive_window_rate=(
+                    metric.replay.false_positive_window_rate
+                ),
+                changed_episode_count=metric.replay.changed_episode_count,
+                detected_episode_count=metric.replay.detected_episode_count,
+                censored_episode_count=metric.replay.censored_episode_count,
+                detection_delay_p50_s=metric.replay.detection_delay_p50_s,
+                detection_delay_p95_s=metric.replay.detection_delay_p95_s,
+            )
+        ),
+    )
+
+
+def _selection_freeze_summary(
+    freeze: DemoModelSelectionFreeze,
+) -> DemoSelectionFreezeSummary:
+    selections = {item.task_id: item.selected_bundle_id for item in freeze.selections}
+    return DemoSelectionFreezeSummary(
+        freeze_id=freeze.freeze_id,
+        study_artifact_id=freeze.study_artifact_id,
+        study_content_digest=freeze.study_content_digest,
+        local_bundle_id=selections[LOCAL_TASK_ID],
+        network_bundle_id=selections[NETWORK_TASK_ID],
     )
 
 
 def demo_registry_view(*, root: Path | None = None) -> DemoRegistryView:
     located = find_current_study(root=root)
     bundles = list_bundles(root=root)
+    freezes = tuple(
+        load_selection_freeze(path)
+        for path in _artifact_directories(
+            _network_demo_root(root) / "registry" / "selection-freezes"
+        )
+    )
     active_set = bundle_runtime_cache.get() if root is None else None
     active = None if active_set is None else active_set.pointer
     freeze = None
@@ -319,6 +473,8 @@ def demo_registry_view(*, root: Path | None = None) -> DemoRegistryView:
         freeze = _current_freeze(located[1].artifact_id, root=root)
         if freeze is not None:
             final = _current_final_evaluation(freeze.freeze_id, root=root)
+            if final is not None:
+                _validate_final_and_ledger(located[0], located[1], freeze, final)
     active_ids = (
         set()
         if active is None
@@ -341,10 +497,12 @@ def demo_registry_view(*, root: Path | None = None) -> DemoRegistryView:
             raw_baseline_validation=_metric_summary(
                 bundle.raw_baseline_validation_metrics
             ),
+            validation_comparison=bundle.validation_comparison,
             active=bundle.bundle_id in active_ids,
         )
         for bundle in bundles
     )
+    freeze_summaries = tuple(_selection_freeze_summary(item) for item in freezes)
     prepared = located is not None and freeze is not None and final is not None
     detail = (
         "Prepared study, frozen selection and single TEST evaluation are available."
@@ -360,10 +518,22 @@ def demo_registry_view(*, root: Path | None = None) -> DemoRegistryView:
         historical_test_ledger_sha256=HISTORICAL_TEST_LEDGER_SHA256,
         active=active,
         bundles=summaries,
+        selection_freezes=freeze_summaries,
         final_metrics=(
             ()
             if final is None
             else tuple(_metric_summary(metric) for metric in final.task_metrics)
+        ),
+        final_raw_baseline_metrics=(
+            ()
+            if final is None
+            else tuple(
+                _metric_summary(metric)
+                for metric in final.raw_baseline_task_metrics
+            )
+        ),
+        final_comparisons=(
+            () if final is None else final.paired_comparisons
         ),
         preparation_detail=detail,
     )

@@ -513,12 +513,15 @@ def _record(
             if correlation is None:
                 flags.add("lag1_correlation_undefined")
     else:
-        peer_ids = tuple(node for node in reference_bundle.node_order if node != sensor_id)
+        candidate_peer_ids = tuple(
+            node for node in reference_bundle.node_order if node != sensor_id
+        )
         if len(reference_bundle.node_order) < profile.minimum_network_nodes:
             flags.add("insufficient_network_context")
         elif focal_anomaly is not None:
             peer_anomalies: list[NDArray[np.float64]] = []
-            for peer_id in peer_ids:
+            valid_peer_ids: list[str] = []
+            for peer_id in candidate_peer_ids:
                 peer_reference = next(
                     node
                     for node in reference_bundle.nodes
@@ -529,10 +532,15 @@ def _record(
                     peer_reference,
                 )
                 if peer_anomaly is None:
-                    flags.add("peer_context_invalid")
-                    break
+                    continue
+                valid_peer_ids.append(peer_id)
                 peer_anomalies.append(peer_anomaly)
-            if len(peer_anomalies) == len(peer_ids):
+            peer_ids = tuple(valid_peer_ids)
+            required_peers = profile.minimum_network_nodes - 1
+            if len(peer_anomalies) < required_peers:
+                flags.add("peer_context_invalid")
+                flags.add("insufficient_valid_peer_context")
+            else:
                 peer_matrix = np.vstack(peer_anomalies)
                 peer_median = np.median(peer_matrix, axis=0)
                 residual = focal_anomaly - peer_median

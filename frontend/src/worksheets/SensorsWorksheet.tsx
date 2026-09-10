@@ -107,6 +107,7 @@ const LIVE_EVENT_OPTIONS: ReadonlyArray<{
 
 const DEFAULT_TEMPERATURE_DRIVER: TemperatureDriverConfiguration = {
   kind: "constant",
+  start_time_s: 0,
   ramp_rate_K_per_s: 0,
   ramp_duration_s: 1,
   sinusoidal_amplitude_K: 0,
@@ -285,7 +286,7 @@ export function SensorsWorksheet() {
           {observationConfiguration && <NetworkComparisonChart frames={state.network.observations} sensorIds={observationConfiguration.nodes.map(({ sensor_id }) => sensor_id)} />}
           {observationConfiguration && observationConfiguration.nodes.length > 1 && state.network.selected_node_id && effectiveReferenceId && (
             <>
-              <article className="workbench-panel compact-panel analysis-controls"><div><p className="panel-kicker">DESCRIPTIVE ANALYSIS</p><h2>Reference selection</h2></div><label className="input-control"><span className="input-label">Reference node</span><select value={effectiveReferenceId} onChange={(event) => setReferenceNodeId(event.target.value)}>{observationConfiguration.nodes.filter(({ sensor_id }) => sensor_id !== state.network.selected_node_id).map((node) => <option key={node.sensor_id} value={node.sensor_id}>{node.sensor_id}</option>)}</select></label><p className="field-help">Correlation, continuous-network PSD, coverage, localization and tracking remain unavailable until explicit analysis contracts are implemented.</p></article>
+              <article className="workbench-panel compact-panel analysis-controls"><div><p className="panel-kicker">DESCRIPTIVE ANALYSIS</p><h2>Reference selection</h2></div><label className="input-control"><span className="input-label">Reference node</span><select value={effectiveReferenceId} onChange={(event) => setReferenceNodeId(event.target.value)}>{observationConfiguration.nodes.filter(({ sensor_id }) => sensor_id !== state.network.selected_node_id).map((node) => <option key={node.sensor_id} value={node.sensor_id}>{node.sensor_id}</option>)}</select></label><p className="field-help">State8 computes its frozen PSD ratio and aligned peer correlation in the connected path. Dedicated localization and tracking remain outside this draft.</p></article>
               <NetworkDifferenceChart frames={state.network.observations} sensorId={state.network.selected_node_id} referenceSensorId={effectiveReferenceId} baselineM={baselineM} sensorNode={observationConfiguration.nodes.find(({ sensor_id }) => sensor_id === state.network.selected_node_id)} referenceNode={observationConfiguration.nodes.find(({ sensor_id }) => sensor_id === effectiveReferenceId)} />
             </>
           )}
@@ -366,6 +367,8 @@ function EnvironmentControls({ configuration, onChange }: ConfigProps) {
           <VectorInputs label="Velocity" unit="m/s" vector={dipole.velocity_m_per_s} onChange={(velocity_m_per_s) => updateFirstDipole(environment, updateEnvironment, { velocity_m_per_s })} />
           <VectorInputs label="Magnetic moment" unit="A·m²" vector={dipole.moment_A_m2} onChange={(moment_A_m2) => updateFirstDipole(environment, updateEnvironment, { moment_A_m2 })} />
           <NumberInput label="Minimum distance" unit="m" value={dipole.minimum_distance_m} min={0.001} step={0.01} onChange={(minimum_distance_m) => updateFirstDipole(environment, updateEnvironment, { minimum_distance_m })} />
+          <NumberInput label="Activation start" unit="s" value={dipole.active_start_time_s} min={0} step={0.1} onChange={(active_start_time_s) => updateFirstDipole(environment, updateEnvironment, { active_start_time_s })} />
+          <NumberInput label="Active duration" unit="s (0 = unbounded)" value={dipole.active_duration_s ?? 0} min={0} step={0.1} onChange={(value) => updateFirstDipole(environment, updateEnvironment, { active_duration_s: value > 0 ? value : null })} />
         </details>
       )}
       <details className="advanced-controls">
@@ -463,6 +466,7 @@ function NodeControls({ node, samplingRateHz, blindMode, onChange }: {
               : { ...(temperatureDriver ?? DEFAULT_TEMPERATURE_DRIVER), kind: kind as TemperatureDriverConfiguration["kind"] },
           });
         }}><option value="none">Legacy constant ambient target</option><option value="constant">Constant driver</option><option value="ramp">Bounded ramp</option><option value="sinusoidal">Sinusoidal driver</option></select></label>
+        {temperatureDriver && temperatureDriver.kind !== "constant" && <NumberInput label="Driver activation start" unit="s" value={temperatureDriver.start_time_s} min={0} step={0.1} onChange={(start_time_s) => updateTemperatureDriver({ start_time_s })} />}
         {temperatureDriver?.kind === "ramp" && <div className="control-grid"><NumberInput label="Ramp rate" unit="K/s" value={temperatureDriver.ramp_rate_K_per_s} onChange={(ramp_rate_K_per_s) => updateTemperatureDriver({ ramp_rate_K_per_s })} /><NumberInput label="Ramp duration" unit="s" value={temperatureDriver.ramp_duration_s} min={0.001} onChange={(ramp_duration_s) => updateTemperatureDriver({ ramp_duration_s })} /></div>}
         {temperatureDriver?.kind === "sinusoidal" && <div className="control-grid three-columns"><NumberInput label="Temperature amplitude" unit="K" value={temperatureDriver.sinusoidal_amplitude_K} min={0} onChange={(sinusoidal_amplitude_K) => updateTemperatureDriver({ sinusoidal_amplitude_K })} /><NumberInput label="Temperature frequency" unit="Hz" value={temperatureDriver.sinusoidal_frequency_Hz} min={0.001} max={frequencyBelowNyquist(1_000, samplingRateHz)} onChange={(sinusoidal_frequency_Hz) => updateTemperatureDriver({ sinusoidal_frequency_Hz })} /><NumberInput label="Temperature phase" unit="rad" value={temperatureDriver.sinusoidal_phase_rad} onChange={(sinusoidal_phase_rad) => updateTemperatureDriver({ sinusoidal_phase_rad })} /></div>}
         <label className="toggle-control"><input type="checkbox" checked={node.errors.saturation_limits_T !== null} onChange={(event) => updateErrors({ ...node.errors, saturation_limits_T: event.target.checked ? [node.errors.saturation_limit_T, node.errors.saturation_limit_T, node.errors.saturation_limit_T] : null })} /><span><strong>Axis-specific saturation override</strong><small>When disabled, every axis uses the legacy scalar saturation limit.</small></span></label>
@@ -497,7 +501,7 @@ function EventControls({ configuration, selectedNodeId, onChange }: ConfigProps 
   return (
     <fieldset>
       <legend>Scheduled events</legend>
-      <p className="field-help">Draft events are included when a new session is created. Live manual injection is not connected in this UI.</p>
+      <p className="field-help">Draft events are included when a new session is created. The separate Live Event Injection panel schedules additional events on the active backend session.</p>
       {configuration.events.map((event, index) => {
         const minimumTargets = event.kind === "shared_instrument_offset" ? 2 : 1;
         return (

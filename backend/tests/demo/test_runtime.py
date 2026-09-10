@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from threading import Event
 from time import monotonic, sleep
 from types import SimpleNamespace
 
@@ -67,6 +68,9 @@ class _FakeRuntime:
             model_scores=score_batch,
             displayed_classes=score_batch.displayed_classes,
             raw_baseline_scores=score_batch,
+            observable_rule_statuses=tuple(
+                "NO_OBSERVED_CHANGE" for _ in sample_ids
+            ),
         )
 
 
@@ -109,14 +113,16 @@ def _runtime(task_id: str, profile_id: str, suffix: str) -> _FakeRuntime:
     )
 
 
-def _bundle_set() -> AppliedBundleSet:
+def _bundle_set(generation: int = 1) -> AppliedBundleSet:
+    suffixes = ("1", "2") if generation == 1 else ("3", "4")
+    freeze_suffix = "a" if generation == 1 else "b"
     pointer_payload = {
         "schema_version": "aqse.network-demo.active-bundles.v1",
-        "generation": 1,
-        "revision": 1,
-        "selection_freeze_id": "aqse-demo-freeze-aaaaaaaaaaaaaaaa",
-        "local_bundle_id": "aqse-demo-bundle-1111111111111111",
-        "network_bundle_id": "aqse-demo-bundle-2222222222222222",
+        "generation": generation,
+        "revision": generation,
+        "selection_freeze_id": f"aqse-demo-freeze-{freeze_suffix * 16}",
+        "local_bundle_id": f"aqse-demo-bundle-{suffixes[0] * 16}",
+        "network_bundle_id": f"aqse-demo-bundle-{suffixes[1] * 16}",
         "previous_application_id": None,
     }
     return AppliedBundleSet(
@@ -126,8 +132,8 @@ def _bundle_set() -> AppliedBundleSet:
                 f"aqse-demo-application-{canonical_digest(pointer_payload)[:16]}"
             ),
         ),
-        local=_runtime(LOCAL_TASK_ID, LOCAL_STATE8_PROFILE_ID, "1"),
-        network=_runtime(NETWORK_TASK_ID, NETWORK_STATE8_PROFILE_ID, "2"),
+        local=_runtime(LOCAL_TASK_ID, LOCAL_STATE8_PROFILE_ID, suffixes[0]),
+        network=_runtime(NETWORK_TASK_ID, NETWORK_STATE8_PROFILE_ID, suffixes[1]),
     )
 
 
@@ -206,5 +212,98 @@ def test_training_slot_pauses_analysis_without_blocking_measurement() -> None:
     resumed = _wait_for_state(service, session.session_id, completed=1)
     assert resumed.state == "running"
     assert resumed.latest_analyzed_window_start_s == 9.0
+    service.clear()
+    network_sessions.clear()
+
+
+def test_analysis_worker_stops_when_sensor_session_stops() -> None:
+    network_sessions.clear()
+    session = network_sessions.create(default_network_configuration(1))
+    service = DemoAnalysisService(runtime_cache=_FakeRuntimeCache(_bundle_set()))  # type: ignore[arg-type]
+    service.start(session.session_id)
+
+    session.stop()
+    deadline = monotonic() + 2.0
+    view = service.get(session.session_id)
+    while view is not None and view.state != "stopped" and monotonic() < deadline:
+        sleep(0.02)
+        view = service.get(session.session_id)
+
+    assert view is not None
+    assert view.state == "stopped"
+    assert view.state_detail == "Continuous analysis stopped with its sensor session."
+    service.clear()
+    network_sessions.clear()
+
+
+def test_bundle_invalidation_discards_inflight_results_and_references() -> None:
+    network_sessions.clear()
+    session = network_sessions.create(default_network_configuration(1))
+    session.step(1_600)
+    cache = _FakeRuntimeCache(_bundle_set())
+    service = DemoAnalysisService(runtime_cache=cache)  # type: ignore[arg-type]
+    entered = Event()
+    release = Event()
+    original = service._analyze_window
+
+    def blocking_analysis(*args, **kwargs):  # type: ignore[no-untyped-def]
+        entered.set()
+        assert release.wait(timeout=2.0)
+        return original(*args, **kwargs)
+
+    service._analyze_window = blocking_analysis  # type: ignore[method-assign]
+    initial = service.start(session.session_id)
+    assert entered.wait(timeout=2.0)
+
+    cache.bundle_set = _bundle_set(2)
+    service.invalidate_bundle_cache()
+    invalidated = service.get(session.session_id)
+    assert invalidated is not None
+    assert invalidated.worker_epoch == initial.worker_epoch + 1
+    assert invalidated.state == "awaiting_reference"
+    assert invalidated.reference_id is None
+    assert invalidated.application_id is None
+    assert invalidated.latest_results == ()
+
+    release.set()
+    sleep(0.1)
+    after_old_result = service.get(session.session_id)
+    assert after_old_result is not None
+    assert after_old_result.latest_results == ()
+    assert after_old_result.completed_window_count == 0
+
+    session.step(1_200)
+    resumed = _wait_for_state(service, session.session_id, completed=1)
+    assert resumed.application_id == _bundle_set(2).pointer.application_id
+    assert resumed.reference_id is not None
+    assert {item.bundle_id for item in resumed.latest_results} == {
+        "aqse-demo-bundle-3333333333333333"
+    }
+    service.clear()
+    network_sessions.clear()
+
+
+def test_bundle_invalidation_preserves_stopped_worker_as_restartable() -> None:
+    network_sessions.clear()
+    session = network_sessions.create(default_network_configuration(1))
+    session.step(900)
+    cache = _FakeRuntimeCache(_bundle_set())
+    service = DemoAnalysisService(runtime_cache=cache)  # type: ignore[arg-type]
+    service.start(session.session_id)
+    stopped = service.stop(session.session_id)
+    assert stopped is not None
+    assert stopped.state == "stopped"
+
+    cache.bundle_set = _bundle_set(2)
+    service.invalidate_bundle_cache()
+    invalidated = service.get(session.session_id)
+    assert invalidated is not None
+    assert invalidated.state == "stopped"
+    assert "start analysis" in invalidated.state_detail
+
+    restarted = service.start(session.session_id)
+    assert restarted.state in {"awaiting_reference", "running"}
+    assert restarted.worker_epoch > invalidated.worker_epoch
+    assert restarted.application_id == _bundle_set(2).pointer.application_id
     service.clear()
     network_sessions.clear()

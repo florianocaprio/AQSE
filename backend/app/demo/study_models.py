@@ -15,6 +15,7 @@ from app.network.models import NetworkSessionConfiguration
 from app.training.models import FrozenModel
 
 StudyPartition = Literal["train", "validation", "test"]
+REPLAY_WINDOW_STARTS_S = tuple(float(value) for value in range(8, 25))
 
 
 class NetworkStudyEpisodePlan(FrozenModel):
@@ -49,14 +50,49 @@ class NetworkStudyEpisodePlan(FrozenModel):
             raise ValueError("network study simulator must use the frozen 100 Hz rate")
         if configuration.buffer_duration_s != simulation.episode_duration_s:
             raise ValueError("network study simulator must use the frozen 28 s duration")
+        if self.scenario == "ENVIRONMENT_COMPATIBLE":
+            active_dipoles = tuple(
+                source for source in configuration.environment.dipoles if source.enabled
+            )
+            if len(active_dipoles) != 1:
+                raise ValueError(
+                    "environment study episodes require one enabled spatial dipole"
+                )
+            source = active_dipoles[0]
+            if (
+                source.active_start_time_s != simulation.event_start_s
+                or source.active_duration_s != simulation.event_duration_s
+            ):
+                raise ValueError(
+                    "environment dipole activation differs from the frozen event window"
+                )
+        device_mode = FROZEN_NETWORK_DEMO_PROTOCOL.device_modes_by_replicate[
+            self.replicate_index
+        ]
+        if self.scenario == "DEVICE_COMPATIBLE" and device_mode == "thermal":
+            focal = next(
+                node
+                for node in configuration.nodes
+                if node.sensor_id == self.focal_sensor_id
+            )
+            driver = focal.errors.temperature_driver
+            if (
+                driver is None
+                or driver.kind.value != "ramp"
+                or driver.start_time_s != simulation.event_start_s
+                or driver.ramp_duration_s != simulation.event_duration_s
+            ):
+                raise ValueError(
+                    "thermal driver activation differs from the frozen event window"
+                )
         return self
 
 
 class NetworkStudyObservation(FrozenModel):
     """Predictive channel: no scenario, label, seed or generator truth."""
 
-    schema_version: Literal["aqse.network-demo.observation.v1"] = (
-        "aqse.network-demo.observation.v1"
+    schema_version: Literal["aqse.network-demo.observation.v2"] = (
+        "aqse.network-demo.observation.v2"
     )
     episode_id: str = Field(pattern=r"^network-episode-[a-f0-9]{16}$")
     generative_lineage_id: str = Field(pattern=r"^network-lineage-[a-f0-9]{16}$")
@@ -65,11 +101,18 @@ class NetworkStudyObservation(FrozenModel):
     focal_sensor_id: str = Field(pattern=r"^S[1-8]$")
     local_feature: State8FeatureRecord
     network_feature: State8FeatureRecord | None
+    local_replay_features: tuple[State8FeatureRecord, ...]
+    network_replay_features: tuple[State8FeatureRecord, ...]
 
     @model_validator(mode="after")
     def validate_profiles(self) -> NetworkStudyObservation:
         if self.local_feature.profile_id != LOCAL_STATE8_PROFILE_ID:
             raise ValueError("local feature has an incompatible profile")
+        self._validate_replay(
+            self.local_replay_features,
+            profile_id=LOCAL_STATE8_PROFILE_ID,
+            expected_peer_count=0,
+        )
         if (
             self.local_feature.session_id != self.episode_id
             or self.local_feature.sensor_id != self.focal_sensor_id
@@ -92,8 +135,16 @@ class NetworkStudyObservation(FrozenModel):
             raise ValueError("local feature differs from the frozen supervised window")
         if self.node_count < 3 and self.network_feature is not None:
             raise ValueError("network feature cannot exist with fewer than three nodes")
+        if self.node_count < 3 and self.network_replay_features:
+            raise ValueError("network replay cannot exist with fewer than three nodes")
         if self.node_count >= 3 and self.network_feature is None:
             raise ValueError("eligible network episodes require a network feature")
+        if self.node_count >= 3:
+            self._validate_replay(
+                self.network_replay_features,
+                profile_id=NETWORK_STATE8_PROFILE_ID,
+                expected_peer_count=self.node_count - 1,
+            )
         if self.network_feature is not None:
             if self.network_feature.profile_id != NETWORK_STATE8_PROFILE_ID:
                 raise ValueError("network feature has an incompatible profile")
@@ -121,18 +172,50 @@ class NetworkStudyObservation(FrozenModel):
                 != self.local_feature.end_exclusive_time_s
             ):
                 raise ValueError("local and network feature contexts are not aligned")
+        if self.local_feature != self.local_replay_features[10]:
+            raise ValueError("local primary feature differs from its replay trace")
+        if (
+            self.network_feature is not None
+            and self.network_feature != self.network_replay_features[10]
+        ):
+            raise ValueError("network primary feature differs from its replay trace")
         return self
+
+    def _validate_replay(
+        self,
+        records: tuple[State8FeatureRecord, ...],
+        *,
+        profile_id: str,
+        expected_peer_count: int,
+    ) -> None:
+        if tuple(item.start_time_s for item in records) != REPLAY_WINDOW_STARTS_S:
+            raise ValueError("study replay must contain the frozen 17 causal windows")
+        for item in records:
+            if (
+                item.profile_id != profile_id
+                or item.session_id != self.episode_id
+                or item.sensor_id != self.focal_sensor_id
+                or item.reference_id != self.local_feature.reference_id
+                or item.end_exclusive_time_s != item.start_time_s + 4.0
+                or len(item.peer_sensor_ids) != expected_peer_count
+                or not item.quality.valid_for_quantum
+                or item.quality.received_sample_count != STATE8_WINDOW_SAMPLES
+                or item.quality.usable_sample_count != STATE8_WINDOW_SAMPLES
+                or len(item.source_frame_ids) != STATE8_WINDOW_SAMPLES
+            ):
+                raise ValueError("study replay feature is incomplete or incompatible")
 
 
 class NetworkStudyLabel(FrozenModel):
     """Independent supervisory channel; never accepted by inference."""
 
-    schema_version: Literal["aqse.network-demo.label.v1"] = (
-        "aqse.network-demo.label.v1"
+    schema_version: Literal["aqse.network-demo.label.v2"] = (
+        "aqse.network-demo.label.v2"
     )
     episode_id: str = Field(pattern=r"^network-episode-[a-f0-9]{16}$")
     generative_lineage_id: str = Field(pattern=r"^network-lineage-[a-f0-9]{16}$")
     partition: StudyPartition
+    event_start_s: Literal[14.0] = 14.0
     local_label: Literal["NORMAL", "CHANGE_DETECTED"]
     network_label: ScenarioName
 

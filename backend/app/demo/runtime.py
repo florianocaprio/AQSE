@@ -83,6 +83,8 @@ class _WorkerRecord:
     ]
     state_detail: str
     cancellation: Event
+    application_epoch: int = 1
+    reference_origin_frame_id: int = 1
     lock: RLock = field(default_factory=RLock)
     thread: Thread | None = None
     frames: deque[ObservationFrame] = field(
@@ -221,12 +223,39 @@ class DemoAnalysisService:
         self._runtime_cache.invalidate()
         with self._lock:
             records = tuple(self._records.values())
+            for record in records:
+                self._epochs[record.session_id] = record.worker_epoch + 1
         for record in records:
             with record.lock:
-                record.latest_results = ()
+                worker_running = (
+                    record.thread is not None
+                    and record.thread.is_alive()
+                    and not record.cancellation.is_set()
+                )
+                record.worker_epoch += 1
+                record.application_epoch += 1
                 record.application_id = None
                 record.active_local_bundle_id = None
                 record.active_network_bundle_id = None
+                record.reference_origin_frame_id = record.cursor_frame_id + 1
+                record.frames.clear()
+                record.reference = None
+                record.latest_analyzed_window_start_s = None
+                record.completed_window_count = 0
+                record.skipped_window_count = 0
+                record.quality_abstention_count = 0
+                record.latest_results = ()
+                record.latency_samples_ms.clear()
+                record.state = "awaiting_reference" if worker_running else "stopped"
+                record.state_detail = (
+                    "Bundle generation changed; acquiring a new observed reference."
+                    if worker_running
+                    else (
+                        "Bundle generation changed while analysis was stopped; "
+                        "start analysis to acquire a new observed reference."
+                    )
+                )
+                record.error = None
 
     def clear(self) -> None:
         with self._lock:
@@ -242,6 +271,13 @@ class DemoAnalysisService:
         try:
             while not record.cancellation.is_set():
                 status = session.view().status
+                if status.state.value == "stopped":
+                    with record.lock:
+                        record.state = "stopped"
+                        record.state_detail = (
+                            "Continuous analysis stopped with its sensor session."
+                        )
+                    return
                 with record.lock:
                     if status.latest_frame_id < record.cursor_frame_id:
                         self._reset_epoch_locked(record)
@@ -273,10 +309,11 @@ class DemoAnalysisService:
                 if not frames:
                     return
                 origin_id = frames[0].frame_id
-                if origin_id != 1:
+                if origin_id != record.reference_origin_frame_id:
                     self._fail(
                         record,
-                        "Reference acquisition did not begin at frame 1; reset the session.",
+                        "Reference acquisition did not begin at its declared origin "
+                        f"frame {record.reference_origin_frame_id}; reset the session.",
                     )
                     return
                 if len(frames) < STATE8_REFERENCE_SAMPLES:
@@ -287,10 +324,18 @@ class DemoAnalysisService:
                 record.state_detail = "Observed reference frozen; waiting for a complete window."
             reference = record.reference
             assert reference is not None
+            application_epoch = record.application_epoch
+            latest_relative_index = int(
+                round(
+                    (
+                        record.latest_observation_time_s
+                        - reference.reference_start_time_s
+                    )
+                    * 100.0
+                )
+            )
             latest_possible_start = (
-                int(round(record.latest_observation_time_s * 100.0))
-                - STATE8_WINDOW_SAMPLES
-                + 1
+                latest_relative_index - STATE8_WINDOW_SAMPLES + 1
             )
             if latest_possible_start < STATE8_REFERENCE_SAMPLES:
                 return
@@ -328,10 +373,12 @@ class DemoAnalysisService:
                 if record.application_id != bundles.pointer.application_id:
                     record.latest_results = ()
                     self._bind_application(record, bundles)
+                application_id = record.application_id
             results = self._analyze_window(
                 record,
                 bundles,
                 window_frames,
+                reference=reference,
                 start_time_s=start_time_s,
             )
             duration_ms = (perf_counter() - started) * 1_000.0
@@ -340,6 +387,13 @@ class DemoAnalysisService:
                 for result in results
             )
             with record.lock:
+                if (
+                    record.application_epoch != application_epoch
+                    or record.application_id != application_id
+                    or record.reference is None
+                    or record.reference.reference_id != reference.reference_id
+                ):
+                    return
                 if previous_start is not None:
                     skipped = max(
                         0,
@@ -364,10 +418,9 @@ class DemoAnalysisService:
         bundles: AppliedBundleSet,
         frames: tuple[ObservationFrame, ...],
         *,
+        reference: State8ObservedReference,
         start_time_s: float,
     ) -> tuple[DemoAnalysisResult, ...]:
-        reference = record.reference
-        assert reference is not None
         local = extract_latest_state8_window(
             frames,
             reference=reference,
@@ -536,6 +589,9 @@ class DemoAnalysisService:
                         raw_baseline_class=(
                             prediction.raw_baseline_scores.predicted_classes[index]
                         ),
+                        observable_rule_status=(
+                            prediction.observable_rule_statuses[index]
+                        ),
                         data_age_ms=data_age_ms,
                         processing_duration_ms=0.0,
                     )
@@ -598,6 +654,7 @@ class DemoAnalysisService:
             top_two_margin=None,
             raw_baseline_scores=None,
             raw_baseline_class=None,
+            observable_rule_status=None,
             data_age_ms=data_age_ms,
             processing_duration_ms=0.0,
         )
@@ -618,6 +675,8 @@ class DemoAnalysisService:
         record.state_detail = "Session reset detected; acquiring a new observed reference."
         record.frames.clear()
         record.reference = None
+        record.reference_origin_frame_id = 1
+        record.application_epoch += 1
         record.cursor_frame_id = 0
         record.latest_observation_time_s = 0.0
         record.latest_analyzed_window_start_s = None

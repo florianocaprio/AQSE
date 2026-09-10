@@ -4,7 +4,12 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
-from app.demo.bundle_models import ActiveBundlePointer, TaskId
+from app.classical.observable_rule import ObservableRuleStatus
+from app.demo.bundle_models import (
+    ActiveBundlePointer,
+    DemoPairedModelComparison,
+    TaskId,
+)
 from app.features.state8_models import State8ProfileId, State8Values
 from app.training.models import FrozenModel
 
@@ -68,6 +73,7 @@ class DemoAnalysisResult(FrozenModel):
     top_two_margin: float | None = Field(default=None, ge=0.0, le=1.0)
     raw_baseline_scores: tuple[float, ...] | None
     raw_baseline_class: str | None
+    observable_rule_status: ObservableRuleStatus | None
     score_semantics: Literal["model-score;not-probability-calibrated"] = (
         "model-score;not-probability-calibrated"
     )
@@ -92,6 +98,7 @@ class DemoAnalysisResult(FrozenModel):
             self.top_two_margin,
             self.raw_baseline_scores,
             self.raw_baseline_class,
+            self.observable_rule_status,
         )
         if self.feature_valid:
             if any(value is None for value in inference_fields):
@@ -153,15 +160,43 @@ class DemoBundleApplicationRequest(FrozenModel):
     selection_freeze_id: str = Field(pattern=r"^aqse-demo-freeze-[a-f0-9]{16}$")
 
 
+class DemoNodeCountSummary(FrozenModel):
+    node_count: int = Field(ge=1, le=8)
+    sample_count: int = Field(gt=0)
+    eligible_count: int = Field(ge=0)
+    class_support: dict[str, int]
+    balanced_accuracy: float = Field(ge=0.0, le=1.0)
+    macro_f1: float = Field(ge=0.0, le=1.0)
+    coverage: float = Field(ge=0.0, le=1.0)
+
+
+class DemoReplaySummary(FrozenModel):
+    episode_count: int = Field(gt=0)
+    window_count: int = Field(gt=0)
+    false_positive_episode_rate: float = Field(ge=0.0, le=1.0)
+    false_positive_window_rate: float = Field(ge=0.0, le=1.0)
+    changed_episode_count: int = Field(ge=0)
+    detected_episode_count: int = Field(ge=0)
+    censored_episode_count: int = Field(ge=0)
+    detection_delay_p50_s: float | None = Field(default=None, ge=0.0)
+    detection_delay_p95_s: float | None = Field(default=None, ge=0.0)
+
+
 class DemoMetricSummary(FrozenModel):
     partition: Literal["validation", "test"]
     task_id: TaskId
+    profile_id: State8ProfileId
     balanced_accuracy: float = Field(ge=0.0, le=1.0)
     macro_f1: float = Field(ge=0.0, le=1.0)
     coverage: float = Field(ge=0.0, le=1.0)
     sample_count: int = Field(gt=0)
+    eligible_count: int = Field(ge=0)
+    class_support: dict[str, int]
+    class_recall: dict[str, float | None]
     uncertain_count: int = Field(ge=0)
     heuristic_ood_count: int = Field(ge=0)
+    by_node_count: tuple[DemoNodeCountSummary, ...]
+    replay: DemoReplaySummary | None = None
 
 
 class DemoBundleSummary(FrozenModel):
@@ -178,12 +213,21 @@ class DemoBundleSummary(FrozenModel):
     class_order: tuple[str, ...]
     validation: DemoMetricSummary
     raw_baseline_validation: DemoMetricSummary
+    validation_comparison: DemoPairedModelComparison
     active: bool
 
 
+class DemoSelectionFreezeSummary(FrozenModel):
+    freeze_id: str = Field(pattern=r"^aqse-demo-freeze-[a-f0-9]{16}$")
+    study_artifact_id: str
+    study_content_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    local_bundle_id: str = Field(pattern=r"^aqse-demo-bundle-[a-f0-9]{16}$")
+    network_bundle_id: str = Field(pattern=r"^aqse-demo-bundle-[a-f0-9]{16}$")
+
+
 class DemoRegistryView(FrozenModel):
-    schema_version: Literal["aqse.demo-registry-view.v1"] = (
-        "aqse.demo-registry-view.v1"
+    schema_version: Literal["aqse.demo-registry-view.v2"] = (
+        "aqse.demo-registry-view.v2"
     )
     prepared: bool
     scientific_label: Literal["research / not validated for field deployment"] = (
@@ -196,7 +240,10 @@ class DemoRegistryView(FrozenModel):
     historical_test_ledger_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     active: ActiveBundlePointer | None
     bundles: tuple[DemoBundleSummary, ...]
+    selection_freezes: tuple[DemoSelectionFreezeSummary, ...] = ()
     final_metrics: tuple[DemoMetricSummary, ...]
+    final_raw_baseline_metrics: tuple[DemoMetricSummary, ...] = ()
+    final_comparisons: tuple[DemoPairedModelComparison, ...] = ()
     preparation_detail: str
 
 
@@ -209,6 +256,27 @@ class DemoTrainingIntent(FrozenModel):
     requested_action: Literal["fit-two-candidate-local-and-network-bundles"] = (
         "fit-two-candidate-local-and-network-bundles"
     )
+    local_train_collection_id: str | None = Field(
+        default=None,
+        pattern=r"^aqse-knowledge-train-[a-f0-9]{16}$",
+    )
+    network_train_collection_id: str | None = Field(
+        default=None,
+        pattern=r"^aqse-knowledge-train-[a-f0-9]{16}$",
+    )
+
+    @model_validator(mode="after")
+    def validate_collection_pair(self) -> DemoTrainingIntent:
+        supplied = (
+            self.local_train_collection_id is not None,
+            self.network_train_collection_id is not None,
+        )
+        if supplied[0] != supplied[1]:
+            raise ValueError(
+                "bounded knowledge retraining requires approved local and network "
+                "TRAIN collections as one atomic bundle pair"
+            )
+        return self
 
 
 class DemoTrainingStepView(FrozenModel):

@@ -8,13 +8,19 @@ from pathlib import Path
 from threading import Event, RLock, Thread
 from typing import Any
 
-from app.demo.bundle_models import LOCAL_TASK_ID, NETWORK_TASK_ID, TaskId
+from app.demo.bundle_models import (
+    LOCAL_TASK_ID,
+    NETWORK_TASK_ID,
+    DemoTaskPartition,
+    TaskId,
+)
 from app.demo.bundle_storage import write_bundle, write_selection_freeze
 from app.demo.evaluation import (
     DemoTrainingCancelled,
     fit_demo_task_candidates,
     freeze_model_selection,
 )
+from app.demo.knowledge_storage import load_approved_train_partition
 from app.demo.provisioning import find_current_study, load_task_partitions
 from app.demo.runtime_models import (
     DemoTrainingIntent,
@@ -28,6 +34,53 @@ from app.training.models import FrozenModel
 from app.training.storage import artifact_root
 
 MAX_TRAINING_JOB_BYTES = 2 * 1024 * 1024
+
+
+def _knowledge_training_partitions(
+    intent: DemoTrainingIntent,
+    local_validation: DemoTaskPartition,
+    network_validation: DemoTaskPartition,
+) -> tuple[
+    DemoTaskPartition,
+    DemoTaskPartition,
+    DemoTaskPartition,
+    DemoTaskPartition,
+] | None:
+    """Bind two reviewed TRAIN collections to the frozen demo VALIDATION set."""
+
+    if (
+        intent.local_train_collection_id is None
+        or intent.network_train_collection_id is None
+    ):
+        return None
+    local_train = load_approved_train_partition(intent.local_train_collection_id)
+    network_train = load_approved_train_partition(intent.network_train_collection_id)
+    if (
+        local_train.task_id != LOCAL_TASK_ID
+        or network_train.task_id != NETWORK_TASK_ID
+    ):
+        raise ValueError("approved knowledge collections are not ordered local/network")
+    from app.demo.bundle_models import canonical_digest
+
+    digest = canonical_digest(
+        {
+            "schema_version": "aqse.network-demo.knowledge-training-pair.v1",
+            "canonical_validation_study_id": intent.study_artifact_id,
+            "canonical_validation_study_digest": local_validation.study_content_digest,
+            "local_train_collection_id": intent.local_train_collection_id,
+            "local_train_collection_digest": local_train.study_content_digest,
+            "network_train_collection_id": intent.network_train_collection_id,
+            "network_train_collection_digest": network_train.study_content_digest,
+        }
+    )
+    study_id = f"aqse-knowledge-study-{digest[:16]}"
+    updates = {"study_artifact_id": study_id, "study_content_digest": digest}
+    return (
+        local_train.model_copy(update=updates),
+        network_train.model_copy(update=updates),
+        local_validation.model_copy(update=updates),
+        network_validation.model_copy(update=updates),
+    )
 
 
 class DemoTrainingBusyError(RuntimeError):
@@ -266,6 +319,22 @@ class DemoTrainingJobService:
                 manifest,
                 "validation",
             )
+            knowledge_partitions = _knowledge_training_partitions(
+                intent,
+                local_validation,
+                network_validation,
+            )
+            if knowledge_partitions is not None:
+                (
+                    local_train,
+                    network_train,
+                    local_validation,
+                    network_validation,
+                ) = knowledge_partitions
+                self._set_stage(
+                    job_id,
+                    "loaded approved knowledge TRAIN collections and frozen VALIDATION",
+                )
             self._set_stage(job_id, "local protected QNG and downstream fit")
             local = fit_demo_task_candidates(
                 local_train,

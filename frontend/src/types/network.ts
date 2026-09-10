@@ -25,6 +25,8 @@ export type DipoleSourceConfiguration = {
   velocity_m_per_s: Vector3;
   moment_A_m2: Vector3;
   minimum_distance_m: number;
+  active_start_time_s: number;
+  active_duration_s: number | null;
   enabled: boolean;
 };
 
@@ -85,6 +87,7 @@ export type NodeErrorConfiguration = {
 
 export type TemperatureDriverConfiguration = {
   kind: "constant" | "ramp" | "sinusoidal";
+  start_time_s: number;
   ramp_rate_K_per_s: number;
   ramp_duration_s: number;
   sinusoidal_amplitude_K: number;
