@@ -1,27 +1,33 @@
 export function TrainingLoopDiagram() {
-  const stages = [
-    "Feature dataset",
-    "VQC(θ)",
-    "TQK",
-    "Kernel",
-    "Alignment loss",
-    "Gradient + FS metric",
-    "QNG",
-  ];
-
   return (
-    <div className="training-loop" aria-label="AQSE QNG training loop">
+    <div className="training-loop" aria-label="AQSE bounded QNG training dependency flow">
       <div className="training-flow">
-        {stages.map((stage, index) => (
-          <div className="training-stage-wrap" key={stage}>
-            <span className="training-stage">{stage}</span>
-            {index < stages.length - 1 && <span aria-hidden="true">→</span>}
-          </div>
-        ))}
+        <span className="training-stage">Observed TRAIN features</span>
+        <span aria-hidden="true">→</span>
+        <span className="training-stage">Frozen encoder</span>
+        <span aria-hidden="true">→</span>
+        <span className="training-stage">VQC(θ)</span>
+        <span aria-hidden="true">→</span>
+        <span className="training-stage">TQK Kθ</span>
+        <span aria-hidden="true">→</span>
+        <span className="training-stage">Loss(Kθ, y TRAIN)</span>
+        <span aria-hidden="true">→</span>
+        <span className="training-stage">Gradient</span>
+      </div>
+      <div className="training-flow" aria-label="Distinct gradient and geometry inputs">
+        <span className="training-stage">VQC states + derivatives</span>
+        <span aria-hidden="true">→</span>
+        <span className="training-stage">Fubini–Study metric</span>
+        <span aria-hidden="true">＋</span>
+        <span className="training-stage">Gradient</span>
+        <span aria-hidden="true">→</span>
+        <span className="training-stage">Damped QNG</span>
+        <span aria-hidden="true">→</span>
+        <span className="training-stage">Accepted θ update</span>
       </div>
       <div className="theta-return" aria-label="QNG updates theta and returns it to the VQC">
-        <span>θ update</span>
-        <span aria-hidden="true">↳ returns to VQC(θ), not to the sensor</span>
+        <span>θ update returns only to VQC(θ)</span>
+        <span>Labels feed loss, not inference. The metric is not produced by the loss.</span>
       </div>
     </div>
   );

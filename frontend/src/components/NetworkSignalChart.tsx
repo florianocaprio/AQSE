@@ -27,7 +27,7 @@ export function NetworkSignalChart({ frames, sensorId }: NetworkSignalChartProps
       <figcaption>
         <span>
           <strong>Observed field · {sensorId}</strong>
-          <small>Missing samples remain explicit gaps; quality flags are preserved separately.</small>
+          <small>Received numeric payloads are rendered; missing samples remain gaps and analysis eligibility stays separate.</small>
         </span>
         <span className="chart-unit">nT</span>
       </figcaption>

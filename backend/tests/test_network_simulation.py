@@ -223,6 +223,34 @@ def test_temperature_driver_is_the_target_of_device_thermal_inertia(
     assert observed == pytest.approx(expected_temperature_k, abs=1.0e-10)
 
 
+def test_temperature_ramp_is_inactive_before_its_scheduled_onset() -> None:
+    node = SensorNodeConfiguration(
+        sensor_id="S1",
+        position_m=(0.0, 0.0, 0.0),
+        errors=NodeErrorConfiguration(
+            initial_temperature_K=300.0,
+            ambient_temperature_K=300.0,
+            temperature_driver=TemperatureDriverConfiguration(
+                kind="ramp",
+                start_time_s=2.0,
+                ramp_rate_K_per_s=10.0,
+                ramp_duration_s=2.0,
+            ),
+            thermal_time_constant_s=1.0e-6,
+        ),
+    )
+
+    generated = _generate(_configuration(node, sampling_rate_Hz=1.0), 6)
+    observed = tuple(
+        frame.observation.readings[0].observed_temperature_K for frame in generated
+    )
+
+    assert observed == pytest.approx(
+        (300.0, 300.0, 300.0, 310.0, 320.0, 320.0),
+        abs=1.0e-10,
+    )
+
+
 def test_streams_are_replayable_and_adding_s2_does_not_change_s1() -> None:
     base = default_network_configuration(2)
     one = NetworkSessionConfiguration.model_validate(

@@ -7,6 +7,12 @@ experiments about hybrid classical and quantum processing of classically read
 sensor data. It is not a certified instrument, a validated digital twin, or
 evidence of quantum advantage.
 
+The end-to-end v1 draft implements one bounded simulated network task and a
+continuous local execution path. “Implemented” means the software component
+exists; it does not mean that predictive accuracy, uncertainty, throughput or
+scientific benefit has been established. Those claims are valid only when the
+corresponding result is recorded in the end-to-end validation document.
+
 This document defines the claims AQSE may and may not make. Implementation and
 validation records must remain separate: a planned test is not a passed test,
 and a simulated result is not an experimental measurement.
@@ -126,6 +132,29 @@ When the information is insufficient, AQSE reports not identifiable or low
 confidence instead of manufacturing a location, velocity, event class, or
 uncertainty interval.
 
+The end-to-end network classifier uses deliberately conditional labels:
+
+- `NORMAL`;
+- `ENVIRONMENT_COMPATIBLE`;
+- `DEVICE_COMPATIBLE`;
+- `MIXED_OR_AMBIGUOUS`.
+
+They name patterns within the frozen simulator domain, not universal causal
+classes. A shared response can be consistent with an environmental change or
+with a shared instrumental offset. A nearby physical source can create a large
+leave-one-out peer residual. The classifier must retain ambiguous outcomes
+rather than resolve observational equivalence using hidden simulator truth.
+
+The routing boundary follows observable context, never the hidden scenario:
+
+- one node uses the local `NORMAL` versus `CHANGE_DETECTED` task and cannot
+  infer environment versus device;
+- two nodes use the local task with an explicit attribution warning;
+- three or more nodes may use the network task only when reference, pose,
+  alignment, sample completeness and peer context are compatible;
+- insufficient peer context causes a declared local fallback or abstention,
+  never synthetic network features.
+
 ## Causality and leakage limits
 
 Simulator truth is permitted for labels and evaluation only. Predictive input
@@ -142,9 +171,40 @@ and test. Dataset partitions vary session seed, trajectory, geometry,
 calibration, severity, and event episodes. Sensor ID, scenario name, or an
 injected-cause field must not become an unintended shortcut feature.
 
+## State8 feature limits
+
+The non-harmonic `aqse.local-state8.v1` and
+`aqse.network-state8.v1` profiles use the observed calibrated world-frame
+North component, an observed 8-second session reference, 4-second causal
+windows and a 1-second hop at 100 Hz. Their eight coordinates describe window
+statistics; they are not sufficient statistics for arbitrary magnetic-source
+inversion.
+
+In particular:
+
+- the network peer-median residual is a robust common-field residual under a
+  local-comparability assumption, not a reconstructed dipole residual or a
+  globally optimal field estimate;
+- signed peer correlation retains physically meaningful negative spatial
+  responses and requires temporal alignment and comparable axes;
+- the Hann-periodogram band ratio depends on the fixed bands, detrending,
+  sampling rate and 1e-12 nT² numerical floor; the floor is not a detection
+  limit;
+- the frozen observed reference is a declared causal calibration, not a
+  population scaler and not continuous re-zeroing;
+- missing, clipped, stuck, clock-invalid, pose-invalid or mathematically
+  undefined inputs can make individual coordinates unavailable and must cause
+  abstention when the quantum contract is incomplete;
+- changing the reference creates a new version and invalidates pending
+  downstream results.
+
+The older harmonic feature profile retains phase and cycle/SNR eligibility and
+is a different compatibility identity. Equal vector length never makes these
+profiles interchangeable.
+
 ## Quantum-model limits
 
-The current TQK8 implementation defines eight qubits, eight inputs, sixteen
+The protected TQK8 implementation defines eight qubits, eight inputs, sixteen
 trainable parameters, and a fidelity kernel. The ideal self-kernel is a Gram
 matrix over a selected batch. It is not:
 
@@ -159,37 +219,75 @@ shot-based, noisy-simulation, or QPU mode must have a distinct name, backend
 record, budget, and validation. No unavailable backend or credential is
 fabricated.
 
-The currently supplied alignment/QNG implementation and demonstration SVC are
-available scientific assets, but they are not connected as a sensor-training
-workflow. They do not establish multilabel diagnosis, localization regression,
-a final neural model, or a general checkpoint across incompatible sensor
-profiles. The bounded preview never invokes QNG.
+The supplied alignment/QNG implementation is connected only through a bounded,
+explicit training wrapper. It is not an inference layer and it never starts
+because a measurement arrives. The protected loss is binary: the network
+representation trial therefore uses only the declared
+`ENVIRONMENT_COMPATIBLE` (-1) versus `DEVICE_COMPATIBLE` (+1) subtask. Numeric
+four-class codes are not passed into a binary yyᵀ objective.
+
+The end-to-end study compares only deterministic `theta0` and one candidate
+after at most ten accepted protected-QNG updates. This small comparison does
+not establish that QNG is globally optimal or that a trained quantum kernel is
+superior. The legacy manual kernel preview remains isolated from the live
+bundle theta and never invokes QNG.
 
 ## AFSE and downstream-model limits
 
-AFSE is mandatory in the target architecture, but its mathematics remains
-unapproved. AQSE cannot create dummy embeddings or train the final neural model
-on an unnamed substitute. Any eventual representation is valid only with its
-encoder, scaler, reference geometry, AFSE method, and output-space version.
+The authorised v1 AFSE is `aqse.afse.nystrom-ridge32.v1`, a standard classical
+regularised Nyström map constructed from the protected fidelity kernel. It is
+not a new quantum algorithm, a sensor wavefunction, a learned physical state,
+or proof that a quantum representation is useful.
 
-Scores are called probabilities only after calibration has been tested.
-Uncertainty coverage must be measured. A decreasing training loss does not
-demonstrate generalization, improved localization, or physical sensitivity.
+Its ordered landmarks come from distinct TRAIN lineages, balanced across the
+downstream TRAIN classes where the fixed budget permits. The reference size is
+at most 32 and is immutable for a bundle. With W the landmark Gram matrix, the
+map stores the symmetric ridge inverse-square-root with λ=1e-6 and evaluates
+`z(x)=k(x,L)B`. Adding, deleting or reordering query rows cannot refit or change
+that space. A live Gram row against the current batch is not an AFSE substitute.
+
+The optional reconstruction residual and TRAIN-residual p99 OOD threshold are
+numerical/engineering diagnostics. They are not calibrated uncertainty or a
+certificate that a physical cause is novel.
+
+The downstream model is the fixed compact MLP
+`aqse.classical.mlp-32x16-tanh-lbfgs.v1`: TRAIN-standardised AFSE input, hidden
+layers 32 and 16, tanh activations and LBFGS under the frozen budget. Its stored
+numeric arrays are evaluated by a verified NumPy runtime rather than loading an
+executable pickle. A separate model with the same architecture receives the
+same raw State8 features as a classical reference.
+
+Outputs are **model scores, not probability-calibrated confidence**. Top score
+below 0.70 or top-two margin below 0.15 yields `UNCERTAIN`; those thresholds are
+fixed engineering choices, not guarantees of coverage. A decreasing training
+loss or a non-uncertain score does not demonstrate generalization, causal
+identification, improved localization, physical sensitivity or quantum
+advantage.
+
+Any change to profile, TRAIN-fitted scaler, theta, protected TQK identity,
+landmarks, B matrix, AFSE dimension or MLP parameters creates an incompatible
+space. Old and new vectors/models must never be mixed.
 
 ## Continuous-operation limits
 
 Configured sampling and refresh rates are engineering starting points, not
-guaranteed real-time performance. The current session status exposes simulation
-lag and bounded-buffer overwrite/gap state. Queue depth, skipped analysis
-windows, feature/prediction data age, and analysis compute duration are required
-future operational safeguards; they are not current network-session metrics.
-Until those safeguards exist, AQSE must not claim an operational continuous
-inference worker or display an old prediction as current.
+guaranteed real-time performance. The end-to-end draft has a separate
+observation-only analysis worker with a 1,600-frame bounded buffer, one
+newest-complete-window queue slot, skipped-window accounting, result age,
+processing duration and p50/p95 latency fields. These safeguards make overload
+visible; they do not create a hard real-time guarantee.
 
-Long-session stability, memory, streaming recovery, and eight-node throughput
-require their own measured validation. The proposed 20-minute soak test is not
-considered executed until its command, environment, duration, and results are
-recorded.
+When protected exact-state work or training occupies the shared heavy slot,
+measurement continues and analysis reports `PAUSED_FOR_TRAINING`/busy. It may
+skip obsolete windows instead of building an unbounded backlog. An old result
+must retain its acquisition interval and age; the UI must not label it current
+after session epoch, configuration, reference or bundle application changes.
+
+Long-session stability, memory, stream recovery and eight-node throughput are
+claims only after the required 600-second real-wall-clock soak is recorded.
+Accelerated simulator time and short test fixtures do not substitute for that
+measurement. A single local result does not promise hard real-time operation on
+other hosts.
 
 ## Comparison policy
 
@@ -211,6 +309,15 @@ single run.
 
 The completion criterion is a correct and reproducible comparison, not a
 preselected winner.
+
+For the bounded `aqse-network-demo-v1` study, the implemented comparison is
+narrower than this general research policy: two theta candidates per local or
+network bundle, an AFSE MLP and a same-State8 raw-feature MLP. Candidate
+selection uses VALIDATION balanced accuracy, then macro-F1, then theta0 on a
+tie. TEST is evaluated once after the selection freeze and cannot select a
+winner or trigger retuning. Results may be weak, tied or worse than the
+classical reference; all are valid outcomes when reported with class support,
+coverage, abstentions and whole-episode intervals.
 
 ## Scientific references supplied with the network specification
 

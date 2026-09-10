@@ -149,14 +149,23 @@ function parseEnvironment(value: unknown): EnvironmentConfiguration {
 }
 
 function parseDipole(value: unknown, path: string): DipoleSourceConfiguration {
-  const data = record(value, path);
-  exactKeys(data, ["source_id", "initial_position_m", "velocity_m_per_s", "moment_A_m2", "minimum_distance_m", "enabled"], path);
+  const data: Record<string, unknown> = {
+    active_start_time_s: 0,
+    active_duration_s: null,
+    ...record(value, path),
+  };
+  exactKeys(data, ["source_id", "initial_position_m", "velocity_m_per_s", "moment_A_m2", "minimum_distance_m", "active_start_time_s", "active_duration_s", "enabled"], path);
+  const activeDuration = data.active_duration_s === null
+    ? null
+    : positiveNumber(data.active_duration_s, `${path}.active_duration_s`, 1_000_000_000);
   return {
     source_id: nonemptyString(data.source_id, `${path}.source_id`),
     initial_position_m: vector3(data.initial_position_m, `${path}.initial_position_m`),
     velocity_m_per_s: vector3(data.velocity_m_per_s, `${path}.velocity_m_per_s`),
     moment_A_m2: vector3(data.moment_A_m2, `${path}.moment_A_m2`),
     minimum_distance_m: positiveNumber(data.minimum_distance_m, `${path}.minimum_distance_m`),
+    active_start_time_s: nonnegativeNumber(data.active_start_time_s, `${path}.active_start_time_s`),
+    active_duration_s: activeDuration,
     enabled: boolean(data.enabled, `${path}.enabled`),
   };
 }
@@ -297,9 +306,13 @@ function parseErrors(value: unknown, path: string): NodeErrorConfiguration {
 }
 
 function parseTemperatureDriver(value: unknown, path: string): TemperatureDriverConfiguration {
-  const data = record(value, path);
+  const data: Record<string, unknown> = {
+    start_time_s: 0,
+    ...record(value, path),
+  };
   exactKeys(data, [
     "kind",
+    "start_time_s",
     "ramp_rate_K_per_s",
     "ramp_duration_s",
     "sinusoidal_amplitude_K",
@@ -314,6 +327,7 @@ function parseTemperatureDriver(value: unknown, path: string): TemperatureDriver
   if (Math.abs(phase) > 1_000_000) fail(`${path}.sinusoidal_phase_rad must be between -1000000 and 1000000.`);
   return {
     kind: enumValue(data.kind, TEMPERATURE_DRIVER_KINDS, `${path}.kind`),
+    start_time_s: nonnegativeNumber(data.start_time_s, `${path}.start_time_s`),
     ramp_rate_K_per_s: rampRate,
     ramp_duration_s: positiveNumber(data.ramp_duration_s, `${path}.ramp_duration_s`, 1_000_000_000),
     sinusoidal_amplitude_K: amplitude,

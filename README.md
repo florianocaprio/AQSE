@@ -1,205 +1,250 @@
 # AQSE — Adaptive Quantum Sensor Engine
 
-AQSE è un banco di prova locale per una pipeline ibrida classica/quantistica applicata a sensori quantistici. Il Milestone 1C rende navigabile una catena controllata: campo sintetico ideale → rete di magnetometri → osservazioni degradate → feature interpretabili → codifica angolare → confronto VQC/TQK a parametri fissi.
+AQSE è un dimostratore locale di ricerca per una pipeline ibrida
+classica/quantistica applicata a reti simulate di magnetometri. Il draft
+end-to-end collega osservazioni sensoriali, feature causali, il VQC/TQK
+dell'autore, una rappresentazione AFSE a landmark fissi e un piccolo modello
+classico. La GUI tecnica è in inglese e mantiene visibili provenienza, qualità,
+degradazione e limiti interpretativi.
 
-Il progetto è un dimostratore software, non un modello certificato di uno strumento commerciale e non una validazione sperimentale.
+> **Etichetta scientifica:** `research / not validated for field deployment`.
+> AQSE non è uno strumento certificato, non dimostra quantum advantage e non
+> fornisce certificati causali universali.
 
-## Perimetro scientifico
-
-Il circuito VQC, il fidelity kernel TQK, la loss di centered kernel alignment, l'ottimizzazione QNG, le derivate di stato, la metrica di Fubini–Study e le formule di campionamento e budget sono codice scientifico controllato dall'autore. I sorgenti originali in `backend/app/quantum/user_pipeline/` e i relativi test non vengono ridisegnati né ottimizzati senza istruzioni esplicite.
-
-Stato corrente:
-
-- il simulatore vettoriale e la rete continua da 1 a 8 nodi sono implementati;
-- l'estrazione finestrata delle otto feature è implementata;
-- la preview locale usa `AngleScaler`, il VQC fornito e il TQK a **theta fisso**;
-- la modalità self-reference è esclusivamente esplorativa, non una valutazione predittiva;
-- il QNG scientifico esiste nel codice dell'autore, ma il training sui dati sensoriali non è collegato;
-- AFSE ha soltanto un confine architetturale: la matematica non è implementata;
-- rete neurale, output engine e QPU fisica non sono implementati;
-- non vengono inventati VQC, kernel, loss, QNG o algoritmi AQSE aggiuntivi.
-
-## Architettura
+## Percorso end-to-end
 
 ```text
-Synthetic field providers
-          │
-          ▼
-1–8 vector magnetometers ──► observation stream (REST + SSE)
-          │                            │
-          └──► separate truth API      ▼
-                                  causal windows
-                                        │
-                                        ▼
-                              8 observable features
-                                        │
-                                        ▼
-                              reference-fit AngleScaler
-                                        │
-                                        ▼
-                         fixed-theta VQC / TQK preview
+ambiente simulato in evoluzione
+        ↓
+1–8 magnetometri vettoriali continui
+        ↓ ObservationFrame, senza simulator truth
+riferimento osservato di sessione (8 s)
+        ↓
+finestre causali State8 (4 s, hop 1 s, 100 Hz)
+        ↓
+AngleScaler TRAIN-only → 8 angoli
+        ↓
+VQC a 8 qubit dell'autore → fidelity TQK
+        ↓
+AFSE Nyström a riferimento congelato
+        ↓
+MLP classico congelato → score e stato operativo
 ```
 
-- `backend/`: Python 3.12, FastAPI, Pydantic, NumPy, Qiskit e test pytest.
-- `frontend/`: React, TypeScript, Vite e una GUI tecnica in inglese.
-- `backend/app/network/`: fisica sintetica, moto, sensori, sessioni, eventi, buffer, SSE e osservabilità.
-- `backend/app/features/`: estrazione finestrata, qualità e provenienza delle feature.
-- `backend/app/quantum/preview.py`: adapter applicativo limitato per la preview a theta fisso.
-- `backend/app/quantum/user_pipeline/`: implementazione scientifica fornita dall'autore.
-- `docs/`: contratti, limiti scientifici e piano di validazione.
+Il simulatore continua indipendentemente dal rendering della GUI e dal calcolo
+del modello. Il worker di analisi conserva buffer limitati, elabora la finestra
+completa più recente, conta le finestre saltate e si mette in
+`PAUSED_FOR_TRAINING` quando il calcolo pesante occupa lo slot condiviso. QNG è
+un'operazione di training esplicita: non viene mai eseguito come livello di
+inferenza e non parte all'arrivo di una misura.
 
-REST gestisce configurazione, controllo e interrogazione. Lo stream di osservazioni usa Server-Sent Events; il confine applicativo mantiene identificativi, cursori e payload versionati, così da permettere una futura evoluzione verso WebSocket senza accoppiare il simulatore al trasporto.
+## Componenti implementati nel draft
 
-## Simulazione sensoriale
+- simulatore scalare storico e rete vettoriale continua da 1 a 8 nodi;
+- separazione tra osservazioni predittive e generator truth;
+- sessioni `start`, `pause`, `resume`, `stop`, `reset`, `replay` e `step`;
+- perturbazioni ambientali, strumentali locali/condivise, dropout, clipping e
+  lettura stuck, con tempo/frame di applicazione registrato;
+- profili `aqse.local-state8.v1` e `aqse.network-state8.v1`;
+- encoder reale a otto coordinate, fitted soltanto su TRAIN;
+- adapter al VQC/TQK protetto e confronto exact-state locale;
+- AFSE `aqse.afse.nystrom-ridge32.v1` a landmark TRAIN-only;
+- MLP `aqse.classical.mlp-32x16-tanh-lbfgs.v1`, persistito come dati numerici
+  JSON e rieseguito con un evaluator NumPy non eseguibile;
+- bundle locali/network versionati, selezione su VALIDATION e applicazione
+  atomica esplicita;
+- worker continuo observation-only e API per stato, training, cancellazione,
+  registry e applicazione;
+- otto worksheet React collegate a valori backend reali. Nessuna worksheet
+  inventa feature, embedding, score o curve di training.
 
-Il backend supporta sia una simulazione vettoriale finita sia sessioni continue in memoria:
+L'implementazione presente non sostituisce l'evidenza di validazione. Comandi,
+conteggi e risultati realmente misurati sono registrati in
+[`docs/validation/end-to-end-demo.md`](docs/validation/end-to-end-demo.md); lo
+stato di consegna sintetico è in
+[`docs/final-delivery.md`](docs/final-delivery.md).
 
-- 1–8 nodi con ruolo `sensor` o `remote_reference`;
-- misura vettoriale, monoassiale o total-field;
-- frame NED e quaternion `wxyz` world-to-sensor;
-- campo uniforme, rumore OU comune, gradiente simmetrico a traccia nulla, dipoli puntiformi, anomalie Gaussiane e campi periodici;
-- moto statico, tumble, high-dynamic, lineare, attraversamento anomalia e combinato;
-- catena strumentale configurabile con disallineamento, cross-axis, soft-iron, gain, bias, drift, temperatura, banda, rumore bianco e saturazione;
-- eventi distinti dal rumore: offset del campo, bias/drift del nodo, noise burst, offset strumentale condiviso, dropout e stuck sensor;
-- seed e stream casuali separati per riproducibilità;
-- sessioni `start`, `pause`, `resume`, `stop`, `reset`, `replay` e avanzamento deterministico `step`;
-- buffer circolare limitato, cursor gap esplicito e SSE con `Last-Event-ID`.
+## Profili State8
 
-Le unità interne e API sono SI: tesla, metri, secondi, kelvin, A·m² e T/m. La GUI converte in unità più leggibili dove indicato.
+I due profili usano il Nord world-frame osservato, espresso una sola volta in
+nT e relativo alla media osservata congelata nei primi 8 secondi. Non usano
+parametri nascosti dell'errore simulato.
 
-### Osservazioni e verità
+| Indice | Entrambi i profili | Unità |
+| --- | --- | --- |
+| f0 | media dell'anomalia Nord | nT |
+| f1 | `1.4826 × MAD` attorno alla mediana | nT |
+| f2 | pendenza OLS rispetto al tempo di acquisizione | nT/s |
+| f3 | rapporto di potenza `10 log10(lower/upper)` | dB |
+| f4 | temperatura media meno riferimento osservato | K |
+| f7 | campioni ricevuti / campioni attesi | adimensionale |
 
-Le osservazioni contengono soltanto ciò che il sensore renderebbe disponibile: misura, metadati osservabili, validità e flag non rivelatori. La generator truth è esposta da endpoint separati e può essere nascosta dalla modalità blind della GUI. Dropout e valori mancanti sono `null`; non vengono sostituiti con zeri o NaN serializzati.
+La coordinata f3 usa un periodogramma one-sided con finestra Hann dopo detrend
+lineare: banda inferiore `[0.25, 2)` Hz, superiore `[2, 20]` Hz e floor
+numerico fisso `1e-12 nT²` per banda.
 
-La quantizzazione ADC e il trasporto di rete fisico non sono modellati in questo milestone. Le sessioni sono locali, in memoria e non persistono al riavvio del backend.
+| Profilo | f5 | f6 | Impiego |
+| --- | --- | --- | --- |
+| `aqse.local-state8.v1` | RMS delle differenze successive, nT | correlazione Pearson lag-one | singolo nodo o fallback locale |
+| `aqse.network-state8.v1` | RMS del residuo dal peer median leave-one-out, nT | media aritmetica delle correlazioni Pearson firmate coi peer | contesto valido con almeno 3 nodi |
 
-## Feature e preview quantistica
+Finestre incomplete, clipping, pose inaffidabile, riferimento non valido,
+feature non finite o correlazioni non definite producono valori nullable,
+validità per-feature e astensione. Nessun dato mancante viene imputato,
+interpolato o trasformato in zero. Il profilo armonico storico e l'encoding
+`phase-direct.v1` restano separati e compatibili soltanto coi propri artefatti.
 
-L'estrattore opera su finestre causali complete e restituisce, nello stesso ordine del contratto TQK8:
+## Modalità operative e limiti di attribuzione
 
-```text
-[amplitude, phase, frequency, variance, drift, snr, spectral_peak, temperature]
-```
+- **N=1:** bundle locale, `LOCAL_ONLY`; può segnalare cambiamento ma non
+  attribuirlo ad ambiente o dispositivo.
+- **N=2:** percorso locale con ambiguità esplicita; una discrepanza non
+  identifica da sola il lato guasto.
+- **N≥3:** bundle network quando riferimento, pose, campioni e peer sono
+  compatibili; altrimenti fallback locale dichiarato o astensione.
 
-Il canale può essere X, Y, Z o magnitudine. Il profilo implementato usa di default finestre da 1 s con sovrapposizione del 50%; un profilo continuo 4 s / hop 1 s è documentato come candidato, non come implementazione separata. Le soglie di qualità v1 sono fisse e verificabili: almeno due cicli, prominenza spettrale minima di 6 dB, SNR minimo di 0 dB e nessun campione saturo.
+Le classi network sono `NORMAL`, `ENVIRONMENT_COMPATIBLE`,
+`DEVICE_COMPATIBLE` e `MIXED_OR_AMBIGUOUS`. Sono ipotesi di pattern nel dominio
+simulato, non prove causali. Il task locale usa soltanto `NORMAL` e
+`CHANGE_DETECTED`. Gli score sono indicati come **model score — not
+probability-calibrated**; la soglia top-score 0,70 e il margine 0,15 sono gate
+ingegneristici congelati, non garanzie statistiche.
 
-Ogni riga è firmata dal backend con provenienza effimera. La preview rifiuta righe alterate, reference bank degenere, leakage temporale e richieste oltre il limite. Lo scaler è adattato soltanto sul reference set. Sono disponibili:
+## Studio dimostrativo congelato
 
-- `self_reference`: Gram matrix interna, marcata **SELF-REFERENCE — EXPLORATORY**;
-- `reference_query`: confronto di finestre query future contro un reference bank causale precedente.
+`aqse-network-demo-v1` prevede 160 episodi indipendenti: quattro scenari ×
+conteggi nodo 1–8 × cinque repliche. In ogni cella tre episodi sono TRAIN, uno
+VALIDATION e uno TEST, per totali 96/32/32. Ogni episodio dura 28 s a 100 Hz;
+il riferimento è `[0,8)` e l'esempio supervisionato del nodo focale
+pre-dichiarato usa `[18,22)`.
 
-Il calcolo usa statevector esatti locali Qiskit o NumPy. Non usa Aer, non configura credenziali IBM e non contatta una QPU.
-
-## GUI del workbench
-
-La pagina è una prima interfaccia tecnica, non il design finale di AQSE. Le otto worksheet sono:
-
-1. Overview
-2. Sensors
-3. Features
-4. Quantum
-5. QNG
-6. AFSE
-7. Neural
-8. Experiments
-
-La GUI consente di scegliere preset, modificare la geometria e i parametri dei sensori, importare/esportare configurazioni JSON, avviare o avanzare una sessione, osservare i segnali, estrarre feature e modificare i 16 parametri theta inviati alla preview. L'import sostituisce soltanto il draft e non crea una sessione automaticamente. Modificare una configurazione rende esplicitamente stale i risultati dipendenti. QNG, AFSE e Neural mostrano soltanto lo stato reale del progetto e non generano metriche simulate.
+La preparazione confronta soltanto `theta0` e un candidato con al massimo 10
+aggiornamenti QNG protetti, seleziona su VALIDATION e, dopo il freeze, esegue
+una sola valutazione del nuovo TEST. Le osservazioni e le etichette sono file
+fisicamente separati. Il TEST storico Milestone 1D non viene riaperto o
+rigenerato; il suo ledger resta verificato opacamente.
 
 ## Prerequisiti
 
-- macOS, inclusi Mac Apple Silicon;
+- macOS, incluso Apple Silicon;
 - Docker Desktop con Docker Compose v2;
 - `make`.
 
-Docker usa l'architettura nativa dell'host e non forza `linux/amd64`. Il flusso standard non richiede Python o Node.js installati localmente.
+Docker usa l'architettura nativa dell'host e non forza `linux/amd64`. Il flusso
+ordinario non richiede Python o Node.js installati direttamente sull'host.
 
-## Avvio locale
+## Preparazione e avvio
 
 ```sh
 cp .env.example .env
-make build
-make up
+make prepare-demo
+make demo
 ```
 
-I bind mount e i processi di reload automatico rendono disponibili le modifiche locali senza ricostruire l'immagine a ogni salvataggio. Non inserire segreti nel file `.env` e non commetterlo.
+`make prepare-demo` è un'operazione scientifica esplicita: genera o riusa lo
+studio immutabile, effettua fit TRAIN, selezione VALIDATION, singola valutazione
+del nuovo TEST e applica la coppia selezionata. Se gli artefatti identici sono
+già presenti li riusa senza riaprire TEST. Non interrompere o cancellare
+manualmente gli artefatti durante questa fase.
+
+`make demo` avvia i servizi e carica i bundle salvati; non esegue training,
+selezione o TEST automaticamente. Gli artefatti persistono per default nella
+directory sorella `../AQSE-artifacts`, configurabile con
+`AQSE_ARTIFACT_ROOT`. Non commettere la directory artefatti né `.env`.
 
 | Risorsa | URL |
 | --- | --- |
 | Frontend | `http://localhost:3000` |
-| Backend health | `http://localhost:8000/api/health` |
-| Quantum adapter readiness | `http://localhost:8000/api/quantum/health` |
-| Quantum infrastructure diagnostics | `POST http://localhost:8000/api/quantum/diagnostics` |
-| Workbench capabilities | `http://localhost:8000/api/workbench/capabilities` |
-| Network health | `http://localhost:8000/api/network/health` |
-| Network presets | `http://localhost:8000/api/network/presets` |
-| Field providers | `http://localhost:8000/api/network/field-providers` |
-| VQC descriptor | `http://localhost:8000/api/quantum/circuit` |
+| Backend health leggero | `http://localhost:8000/api/health` |
+| Quantum readiness leggera | `http://localhost:8000/api/quantum/health` |
+| Diagnostica quantistica esplicita | `POST http://localhost:8000/api/quantum/diagnostics` |
+| Demo registry | `http://localhost:8000/api/demo/registry` |
 | OpenAPI | `http://localhost:8000/openapi.json` |
-| FastAPI documentation | `http://localhost:8000/docs` |
+| FastAPI docs | `http://localhost:8000/docs` |
 
-Le porte e il target del proxy Vite possono essere modificati partendo da `.env.example`.
-Le porte sono pubblicate soltanto sull'interfaccia loopback `127.0.0.1`; il banco
-non espone servizi alla rete locale per impostazione predefinita.
+Le porte sono vincolate a `127.0.0.1`; `.env.example` permette di cambiarle.
+Il probe Docker del backend usa esclusivamente `/api/health` e non esegue
+calcoli quantistici.
 
-### Percorso demo consigliato
+## Dimostrazione manuale breve
 
-1. Aprire la worksheet **Sensors** e caricare il preset `Quantum preview signal`.
-2. Creare una sessione e generare un numero di campioni sufficiente per più finestre complete.
-3. In **Features**, scegliere il sensore e il canale, quindi estrarre le feature.
-4. In **Quantum**, verificare tabella raw/encoded, theta e backend esatto.
-5. Eseguire prima la preview self-reference esplorativa, oppure creare una separazione causale reference/query.
-6. Salvare o reimportare la configurazione, oppure esportare feature ed esperimenti, dalla worksheet **Experiments**.
+1. Aprire `http://localhost:3000` e attivare **Blind mode** per verificare che
+   l'inferenza funzioni senza mostrare la generator truth.
+2. In **Sensors**, caricare una configurazione a quattro nodi, creare la
+   sessione e premere **Start**.
+3. In **Overview**, premere **Start analysis**. Attendere il riferimento
+   osservato di 8 s e la prima finestra causale completa.
+4. Esaminare valori e validità in **Features**, identità theta e circuito in
+   **Quantum Engine**, vettore reale in **Local Embedding / AFSE** e score in
+   **Neural Model**.
+5. Tornare in **Sensors**, disattivare deliberatamente Blind mode per rendere
+   disponibili i controlli di scenario, scegliere un evento e usare **Apply
+   perturbation**; riattivare Blind mode e confrontare risposte nodo/peer. Il
+   comando non entra nell'input del modello.
+6. In **QNG Training** il training parte solo col pulsante dedicato, può essere
+   annullato e non promuove automaticamente alcun modello.
+7. In **Experiments**, applicare esplicitamente una coppia compatibile e
+   consultare registry e metriche congelate senza rieseguire TEST.
 
-Per la simulazione verticale sono disponibili anche `Eight-node causal event demo`,
-con sorgente mobile e cause componibili, e `Single-sensor ambiguity control`, con
-due fasi di uguale offset ma diversa origine. Le cause appartengono esclusivamente
-al canale truth e non sono presentate come diagnosi del modello.
+La guida completa, inclusi reset/replay e stati di errore, è in
+[`docs/user-guide.md`](docs/user-guide.md).
+
+## API end-to-end
+
+| Metodo | Percorso | Funzione |
+| --- | --- | --- |
+| GET | `/api/demo/registry` | artefatti, bundle, freeze e metriche read-only |
+| POST | `/api/demo/analysis/{session_id}/start` | acquisisce riferimento e avvia il worker |
+| GET | `/api/demo/analysis/{session_id}` | stato, latenze, qualità e ultimi risultati |
+| POST | `/api/demo/analysis/{session_id}/stop` | arresta esplicitamente il worker |
+| POST | `/api/demo/training/jobs` | avvia un job limitato e idempotente per intent |
+| GET | `/api/demo/training/jobs/{job_id}` | stato e step QNG accettati |
+| POST | `/api/demo/training/jobs/{job_id}/cancel` | richiede cancellazione |
+| POST | `/api/demo/bundles/apply` | applica atomicamente la coppia del freeze |
+
+Le API di sessione, osservazioni, SSE, eventi, feature armoniche e preview
+quantistica storica restano disponibili e documentate nell'OpenAPI locale.
 
 ## Comandi di sviluppo
 
-- `make build`: costruisce entrambe le immagini Docker.
-- `make up`: avvia backend e frontend in background.
-- `make down`: arresta i servizi senza rimuovere dati estranei al progetto.
-- `make logs`: segue i log di entrambi i servizi.
-- `make test`: esegue pytest, Ruff, typecheck, ESLint, Vitest e build Vite.
-- `make soak`: esegue il soak test continuo predefinito da 20 minuti su 8 nodi.
-- `make clean`: arresta i servizi e rimuove soltanto cache/output locali generati.
-
-Durata e numero di nodi del soak sono sovrascrivibili:
-
 ```sh
-SOAK_DURATION_SECONDS=60 SOAK_NODE_COUNT=4 SOAK_SEED=42 make soak
+make build          # costruisce backend e frontend
+make prepare-demo   # prepara/reusa studio e bundle end-to-end
+make demo           # avvia e attende servizi healthy
+make up             # avvio Compose di sviluppo
+make down           # arresto non distruttivo
+make logs           # log dei servizi
+make test           # pytest, Ruff, typecheck, ESLint, Vitest e build
+make acceptance     # acceptance API/browser-supporting checks documentati
+make soak           # soak continuo parametrizzabile
+make clean          # rimuove soltanto cache/output locali previsti
 ```
 
-## Verifica manuale essenziale
+Il soak finale richiesto usa otto nodi e 600 s di tempo reale. Ridurre la
+durata serve soltanto per prove locali e non equivale all'accettazione finale:
 
 ```sh
-make test
-curl --fail http://localhost:8000/api/health
-curl --fail http://localhost:8000/api/quantum/health
-curl --fail --request POST http://localhost:8000/api/quantum/diagnostics
-curl --fail http://localhost:8000/api/network/health
-curl --fail http://localhost:8000/api/network/presets
-curl --fail http://localhost:3000
+SOAK_DURATION_SECONDS=60 SOAK_NODE_COUNT=4 make soak
 ```
 
-`GET /api/health` è il solo probe Docker del backend e non importa né esegue
-calcoli quantistici. Docker lo controlla ogni 10 secondi con timeout di 3 secondi,
-cinque tentativi e 5 secondi iniziali di tolleranza.
+## Confini scientifici essenziali
 
-`GET /api/quantum/health` è una readiness leggera: verifica disponibilità
-dell'adapter, installazione di Qiskit e metadata statici del backend/circuito,
-senza costruire statevector, kernel o confronti numerici. Il frontend può
-interrogarla periodicamente.
+- Il VQC, TQK, loss, derivate, metrica di Fubini–Study e QNG originali sono
+  proprietà scientifica dell'autore e non vengono ridisegnati.
+- AFSE è una mappa classica regolarizzata costruita dal kernel, non una nuova
+  funzione quantistica né la wavefunction fisica del sensore.
+- Un vettore AFSE o una matrice di fedeltà non dimostrano sensibilità fisica,
+  localizzazione o vantaggio quantistico.
+- L'OOD basato sul residuo TRAIN p99 è euristico. Gli score MLP non sono
+  probabilità calibrate.
+- Simulator truth, seed, scenario, interventi nascosti e campioni futuri non
+  entrano nell'inferenza; restano nei canali separati di audit/label.
+- Prestazioni, beneficio quantum, latenza e stabilità sono affermazioni valide
+  solo se presenti come risultati realmente misurati nel record di
+  validazione.
 
-`POST /api/quantum/diagnostics` è invece lo smoke test deterministico esplicito.
-Solo su richiesta costruisce il VQC, esegue gli statevector Qiskit e NumPy e li
-confronta numericamente, restituendo anche il tempo di esecuzione. Un guard
-impedisce diagnostiche concorrenti e risponde HTTP 429 quando una è già attiva.
-Questo percorso non addestra modelli, non invoca QNG e non restituisce lo
-statevector.
-
-Il piano riproducibile è in `docs/validation/milestone-1c-validation-plan.md`; i comandi realmente eseguiti, i risultati misurati e i limiti osservati sono registrati in `docs/validation/milestone-1c.md`.
+Per i limiti completi vedere
+[`docs/architecture/scientific-scope-and-limitations.md`](docs/architecture/scientific-scope-and-limitations.md).
 
 ## Struttura principale
 
@@ -207,34 +252,26 @@ Il piano riproducibile è in `docs/validation/milestone-1c-validation-plan.md`; 
 AQSE/
 ├── backend/
 │   ├── app/
-│   │   ├── api/
-│   │   ├── features/
-│   │   ├── network/
-│   │   ├── preprocessing/
-│   │   ├── sensors/
-│   │   └── quantum/
-│   │       └── user_pipeline/
+│   │   ├── api/          # REST/SSE e API demo
+│   │   ├── classical/    # MLP fitted e runtime NumPy
+│   │   ├── demo/         # protocollo, studio, bundle, worker, registry
+│   │   ├── embeddings/   # AFSE Nyström
+│   │   ├── features/     # profili armonici e State8
+│   │   ├── network/      # simulatore/sessioni/eventi
+│   │   ├── quantum/      # adapter e sorgenti scientifici protetti
+│   │   └── training/     # archivi e training storici
 │   ├── scripts/
 │   └── tests/
-├── frontend/
-│   └── src/
-│       ├── api/
-│       ├── app/
-│       ├── components/
-│       ├── diagrams/
-│       ├── state/
-│       ├── types/
-│       └── worksheets/
+├── frontend/src/
+│   ├── api/
+│   ├── components/
+│   ├── state/
+│   └── worksheets/
 ├── docs/
-│   ├── architecture/
-│   ├── features/
-│   ├── quantum/
-│   ├── sensors/
-│   └── validation/
 ├── docker-compose.yml
 ├── Makefile
-├── .env.example
 └── README.md
 ```
 
-Il file ZIP sorgente resta in `incoming/`, directory esclusa da Git. Sono esclusi anche `.env`, `node_modules`, build, cache, log e artefatti runtime.
+ZIP in `incoming/`, `.env`, `node_modules`, build, cache, log e artefatti
+runtime sono esclusi da Git.

@@ -4,10 +4,13 @@ services:
       context: ./backend
     environment:
       PYTHONUNBUFFERED: "1"
+      AQSE_ARTIFACT_ROOT: /artifacts
+      AQSE_ARTIFACT_LIMIT_BYTES: "${AQSE_ARTIFACT_LIMIT_BYTES:-1073741824}"
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
+      - ${AQSE_ARTIFACT_ROOT:-../AQSE-artifacts}:/artifacts
     healthcheck:
       # Lightweight liveness/readiness only; quantum diagnostics are explicit POST requests.
       test:

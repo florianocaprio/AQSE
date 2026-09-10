@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from app.network.defaults import default_network_configuration
 from app.network.models import (
+    DipoleSourceConfiguration,
     EnvironmentConfiguration,
     EventKind,
     FiniteVectorSimulationConfiguration,
@@ -30,6 +31,7 @@ from app.network.providers import (
     FieldProvider,
     SyntheticSpatialFieldProvider,
     WorldMagneticModelProvider,
+    dipole_position_m,
 )
 
 
@@ -263,6 +265,34 @@ def test_point_dipole_has_inverse_cube_decay_and_no_hidden_clamp() -> None:
                 moment_A_m2=(0.0, 0.0, 1.0),
                 minimum_distance_m=0.01,
             )
+
+
+def test_scheduled_dipole_is_inactive_before_onset_and_moves_from_its_onset() -> None:
+    source = DipoleSourceConfiguration(
+        source_id="scheduled",
+        initial_position_m=(-2.0, 0.0, 0.0),
+        velocity_m_per_s=(0.5, 0.0, 0.0),
+        moment_A_m2=(0.0, 0.0, 1.0),
+        active_start_time_s=5.0,
+        active_duration_s=2.0,
+    )
+    provider = SyntheticSpatialFieldProvider(
+        EnvironmentConfiguration(dipoles=(source,))
+    )
+
+    np.testing.assert_allclose(dipole_position_m(source, 5.0), (-2.0, 0.0, 0.0))
+    np.testing.assert_allclose(dipole_position_m(source, 6.0), (-1.5, 0.0, 0.0))
+    np.testing.assert_allclose(
+        provider.evaluate((0.0, 0.0, 1.0), 4.999).dipole_field_world_T,
+        np.zeros(3),
+    )
+    assert np.linalg.norm(
+        provider.evaluate((0.0, 0.0, 1.0), 5.0).dipole_field_world_T
+    ) > 0.0
+    np.testing.assert_allclose(
+        provider.evaluate((0.0, 0.0, 1.0), 7.0).dipole_field_world_T,
+        np.zeros(3),
+    )
 
 
 def test_gaussian_anomaly_peaks_at_center_and_is_spatially_symmetric() -> None:

@@ -1,7 +1,6 @@
-from threading import BoundedSemaphore
-
 from fastapi import APIRouter, HTTPException
 
+from app.quantum.admission import heavy_quantum_slot
 from app.quantum.preview import (
     CircuitDescription,
     QuantumPreviewRequest,
@@ -11,7 +10,7 @@ from app.quantum.preview import (
 )
 
 router = APIRouter()
-preview_slot = BoundedSemaphore(value=1)
+preview_slot = heavy_quantum_slot
 
 
 @router.get("/quantum/circuit", response_model=CircuitDescription)

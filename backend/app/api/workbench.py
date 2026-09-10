@@ -46,16 +46,22 @@ def workbench_capabilities() -> WorkbenchCapabilities:
             detail="Bounded fixed-theta AngleScaler, VQC and TQK preview is available",
         ),
         qng_training=CapabilityStatus(
-            status="available_not_connected",
-            detail="Scientific QNG implementation available; sensor training integration pending",
+            status="implemented",
+            detail=(
+                "Explicit bounded demo training uses the protected QNG adapter; "
+                "live inference never trains"
+            ),
         ),
         local_embedding_afse=CapabilityStatus(
-            status="architecture_defined",
-            detail="Architecture defined; mathematical implementation pending",
+            status="implemented",
+            detail="Frozen Nyström-ridge32 AFSE research embedding is connected",
         ),
         neural_model=CapabilityStatus(
-            status="not_implemented",
-            detail="Scientific design pending",
+            status="implemented",
+            detail=(
+                "Frozen scikit-learn MLP research classifier and raw-feature "
+                "baseline are connected"
+            ),
         ),
         physical_qpu=CapabilityStatus(
             status="not_implemented",

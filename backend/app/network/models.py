@@ -94,6 +94,8 @@ class DipoleSourceConfiguration(StrictModel):
     velocity_m_per_s: Vector3 = ZERO_VECTOR
     moment_A_m2: Vector3
     minimum_distance_m: float = Field(default=0.05, ge=1.0e-9, le=1.0e9)
+    active_start_time_s: float = Field(default=0.0, ge=0.0, le=1.0e9)
+    active_duration_s: float | None = Field(default=None, gt=0.0, le=1.0e9)
     enabled: bool = True
 
     @model_validator(mode="after")
@@ -212,6 +214,7 @@ class TemperatureDriverConfiguration(StrictModel):
     """Optional ambient-temperature variation around the legacy constant target."""
 
     kind: TemperatureDriverKind = TemperatureDriverKind.CONSTANT
+    start_time_s: float = Field(default=0.0, ge=0.0, le=1.0e9)
     ramp_rate_K_per_s: float = Field(default=0.0, ge=-1_000.0, le=1_000.0)
     ramp_duration_s: float = Field(default=1.0, gt=0.0, le=1.0e9)
     sinusoidal_amplitude_K: float = Field(default=0.0, ge=0.0, le=2_500.0)

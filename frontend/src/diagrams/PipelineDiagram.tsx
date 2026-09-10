@@ -16,9 +16,9 @@ const DEFAULT_STAGES: Stage[] = [
   { label: "Features", detail: "8D vectors", status: "implemented" },
   { label: "VQC", detail: "8 qubits", status: "implemented" },
   { label: "TQK", detail: "kernel geometry", status: "implemented" },
-  { label: "AFSE", detail: "local embedding", status: "architecture_defined" },
-  { label: "Neural", detail: "task model", status: "not_implemented" },
-  { label: "Output", detail: "prediction", status: "not_implemented" },
+  { label: "AFSE", detail: "frozen embedding", status: "implemented" },
+  { label: "Neural", detail: "frozen model", status: "implemented" },
+  { label: "Output", detail: "conditional result", status: "implemented" },
 ];
 
 export function PipelineDiagram({ stages = DEFAULT_STAGES }: PipelineDiagramProps) {

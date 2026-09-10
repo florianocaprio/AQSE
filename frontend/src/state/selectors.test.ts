@@ -30,7 +30,7 @@ describe("observation-only selectors", () => {
     expect(points[1].quality_flags).toContain("signal_absent");
   });
 
-  it("renders stuck and clock-errored payloads as gaps while preserving flags", () => {
+  it("renders received stuck and clock-errored payloads while preserving flags", () => {
     const validFrame = frame(1, true);
     const stuckBase = frame(2, true);
     const clockBase = frame(3, true);
@@ -44,9 +44,9 @@ describe("observation-only selectors", () => {
     };
 
     const points = chartPointsForSensor([validFrame, stuckFrame, timedFrame], "S1");
-    expect(points[1].x_nt).toBeNull();
+    expect(points[1].x_nt).toBeCloseTo(2);
     expect(points[1].quality_flags).toContain("stuck");
-    expect(points[2].x_nt).toBeNull();
+    expect(points[2].x_nt).toBeCloseTo(3);
     expect(points[2].quality_flags).toContain("clock_error");
   });
 
@@ -69,6 +69,18 @@ describe("observation-only selectors", () => {
 
     expect(series?.time_s).toHaveLength(16);
     expect(series?.acquisition_id).toContain(":18-33");
+  });
+
+  it("keeps the first valid frame after a retained-buffer gap", () => {
+    const frames = [
+      ...Array.from({ length: 20 }, (_, index) => frame(index + 1, true)),
+      ...Array.from({ length: 16 }, (_, index) => frame(index + 22, true)),
+    ];
+
+    const series = latestContiguousVectorSeries(frames, "S1", 100);
+
+    expect(series?.time_s).toHaveLength(16);
+    expect(series?.acquisition_id).toContain(":22-37");
   });
 
   it("computes differences only for compatible, valid readouts", () => {
