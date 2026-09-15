@@ -1,4 +1,4 @@
-.PHONY: build up down logs test prepare-demo demo acceptance soak clean
+.PHONY: build up down logs test prepare-demo four-sensor-study demo acceptance soak clean
 
 build:
 	docker compose build
@@ -22,6 +22,11 @@ test: build
 
 prepare-demo: build
 	docker compose run --rm --no-deps backend python -m scripts.prepare_demo
+
+# Explicit research run: 20-row noncanonical pilot, protocol freeze, then one
+# authorized 100-episode held-out evaluation of the already-frozen network model.
+four-sensor-study: build
+	docker compose run --rm --no-deps backend python -m scripts.run_four_sensor_study
 
 # Starts saved artifacts only; preparation, training, and TEST access remain explicit.
 demo: build
