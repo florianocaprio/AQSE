@@ -36,6 +36,22 @@ class KernelDiagnosticsResult(FrozenModel):
     trace: float = Field(gt=0.0)
     maximum_eigenvalue_trace_ratio: float = Field(ge=0.0, le=1.0)
     effective_rank: float = Field(ge=1.0)
+    minimum_eigenvalue: float
+    maximum_eigenvalue: float = Field(gt=0.0)
+    diagonal_minimum: float
+    diagonal_maximum: float
+    diagonal_mean: float
+    symmetry_max_abs_error: float = Field(ge=0.0)
+    off_diagonal_minimum: float
+    off_diagonal_maximum: float
+    off_diagonal_mean: float
+    off_diagonal_standard_deviation: float = Field(ge=0.0)
+    positive_condition_number: float | None = Field(default=None, ge=1.0)
+
+
+class ClassificationMetricPair(FrozenModel):
+    balanced_accuracy: float = Field(ge=0.0, le=1.0)
+    macro_f1: float = Field(ge=0.0, le=1.0)
 
 
 class SplitSizes(FrozenModel):
@@ -66,8 +82,11 @@ class ReplicaResult(FrozenModel):
     """One isolated TEST result; it is not an aggregate scientific claim."""
 
     replica_index: int = Field(ge=0)
+    base_seed: int = Field(ge=0, le=2**32 - 1)
     seeds: ReplicaSeeds
     split_sizes: SplitSizes
+    split_identities: dict[str, tuple[str, ...]]
+    class_balance: dict[str, dict[str, int]]
     dataset_metadata: dict[str, Any]
     quantum_balanced_accuracy: float = Field(ge=0.0, le=1.0)
     baseline_balanced_accuracy: dict[str, float]
@@ -75,6 +94,14 @@ class ReplicaResult(FrozenModel):
     quantum_selection: QuantumSelection
     kernel_diagnostics_by_checkpoint: tuple[KernelDiagnosticsResult, ...]
     selected_kernel_diagnostics: KernelDiagnosticsResult
+    test_kernel_statistics: dict[str, float]
+    train_metrics: dict[str, ClassificationMetricPair]
+    validation_metrics: dict[str, ClassificationMetricPair]
+    test_metrics: dict[str, ClassificationMetricPair]
+    runtime_seconds: dict[str, float]
+    source_hashes: dict[str, str]
+    abstention_count: int = Field(ge=0)
+    failure: str | None = None
     test_ledger_path: str
 
     @model_validator(mode="after")
@@ -87,6 +114,10 @@ class ReplicaResult(FrozenModel):
             expected = self.quantum_balanced_accuracy - score
             if abs(self.delta_by_baseline[name] - expected) > 1.0e-12:
                 raise ValueError(f"baseline {name} delta is inconsistent")
+        expected_methods = {"quantum", *self.baseline_balanced_accuracy}
+        for field in (self.train_metrics, self.validation_metrics, self.test_metrics):
+            if set(field) != expected_methods:
+                raise ValueError("TRAIN/VALIDATION/TEST metrics must contain every method")
         return self
 
 

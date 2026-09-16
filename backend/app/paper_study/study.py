@@ -5,6 +5,7 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 import numpy as np
@@ -18,6 +19,7 @@ from app.quantum.user_pipeline.tqk8 import (
     StateEngine,
     fit_qng,
 )
+from app.training.canonical import file_sha256
 from app.training.encoding import wrap_phase_direct
 
 from .baselines import FittedComparator, fit_classical_comparators
@@ -29,6 +31,7 @@ from .datasets import (
 )
 from .diagnostics import kernel_diagnostics
 from .models import (
+    ClassificationMetricPair,
     PermutationControlResult,
     QuantumSelection,
     ReplicaResult,
@@ -50,6 +53,8 @@ class _QuantumCandidate:
     model: SVC
     validation_balanced_accuracy: float
     validation_macro_f1: float
+    train_balanced_accuracy: float
+    train_macro_f1: float
     diagnostics_index: int
 
 
@@ -70,6 +75,38 @@ class _FittedQuantum:
             self.X_train_encoded,
         )
         return np.asarray(self.candidate.model.predict(kernel), dtype=np.int8)
+
+    def cross_kernel(self, X: NDArray[np.float64]) -> NDArray[np.float64]:
+        """Return TEST/TRAIN similarities; this does not expose TEST labels."""
+
+        encoded = _encode_with_scaler(X, self.scaler)
+        return np.asarray(
+            self.engine.gram(encoded, self.candidate.theta, self.X_train_encoded),
+            dtype=np.float64,
+        )
+
+
+def _metric_pair(y: NDArray[np.int8], predicted: NDArray[np.int8]) -> ClassificationMetricPair:
+    return ClassificationMetricPair(
+        balanced_accuracy=float(balanced_accuracy_score(y, predicted)),
+        macro_f1=float(
+            f1_score(y, predicted, labels=[-1, 1], average="macro", zero_division=0.0)
+        ),
+    )
+
+
+def _source_hashes() -> dict[str, str]:
+    root = Path(__file__).resolve().parents[2]
+    names = (
+        "app/paper_study/study.py",
+        "app/paper_study/datasets.py",
+        "app/paper_study/baselines.py",
+        "app/paper_study/diagnostics.py",
+        "app/paper_study/statistics.py",
+        "app/quantum/user_pipeline/tqk8.py",
+        "app/quantum/user_pipeline/sampler_qng.py",
+    )
+    return {name: file_sha256(root / name) for name in names}
 
 
 def _derive_seed(base_seed: int, replica_index: int, domain: str) -> int:
@@ -156,6 +193,7 @@ def _fit_quantum(
         for c_value in (0.1, 1.0, 10.0):
             model = SVC(kernel="precomputed", C=c_value).fit(K_train, dataset.y_train)
             predictions = np.asarray(model.predict(K_validation), dtype=np.int8)
+            train_predictions = np.asarray(model.predict(K_train), dtype=np.int8)
             candidates.append(
                 _QuantumCandidate(
                     checkpoint_index=checkpoint_index,
@@ -169,6 +207,18 @@ def _fit_quantum(
                         f1_score(
                             dataset.y_validation,
                             predictions,
+                            labels=[-1, 1],
+                            average="macro",
+                            zero_division=0.0,
+                        )
+                    ),
+                    train_balanced_accuracy=float(
+                        balanced_accuracy_score(dataset.y_train, train_predictions)
+                    ),
+                    train_macro_f1=float(
+                        f1_score(
+                            dataset.y_train,
+                            train_predictions,
                             labels=[-1, 1],
                             average="macro",
                             zero_division=0.0,
@@ -233,7 +283,10 @@ def _run_replica(
     output_root: Path,
     qng_steps: int,
     permute_train_labels: bool,
+    base_seed: int,
+    dataset_generation_seconds: float,
 ) -> ReplicaResult:
+    replica_started = perf_counter()
     validate_replicated_dataset(dataset)
     if permute_train_labels:
         rng = np.random.default_rng(seeds.permutation)
@@ -255,6 +308,7 @@ def _run_replica(
     }
     store.publish(dataset, protocol)
 
+    fit_started = perf_counter()
     quantum = _fit_quantum(dataset, qng_seed=seeds.qng, qng_steps=qng_steps)
     baselines = fit_classical_comparators(
         dataset.X_train,
@@ -263,10 +317,15 @@ def _run_replica(
         dataset.y_validation,
         seed=seeds.classical,
     )
+    fit_seconds = perf_counter() - fit_started
     store.freeze_selection(_selection_payload(quantum, baselines))
 
     X_test = store.open_test_observations()
-    quantum_predictions = quantum.predict(X_test)
+    test_started = perf_counter()
+    test_kernel = quantum.cross_kernel(X_test)
+    quantum_predictions = np.asarray(
+        quantum.candidate.model.predict(test_kernel), dtype=np.int8
+    )
     baseline_predictions = {
         name: comparator.predict(X_test) for name, comparator in baselines.items()
     }
@@ -279,14 +338,66 @@ def _run_replica(
     selected_diagnostics = quantum.diagnostics[
         quantum.candidate.diagnostics_index
     ]
+    test_metrics = {"quantum": _metric_pair(y_test, quantum_predictions)}
+    test_metrics.update(
+        {
+            name: _metric_pair(y_test, predictions)
+            for name, predictions in baseline_predictions.items()
+        }
+    )
+    train_metrics = {
+        "quantum": ClassificationMetricPair(
+            balanced_accuracy=quantum.candidate.train_balanced_accuracy,
+            macro_f1=quantum.candidate.train_macro_f1,
+        ),
+        **{
+            name: ClassificationMetricPair(
+                balanced_accuracy=item.train_balanced_accuracy,
+                macro_f1=item.train_macro_f1,
+            )
+            for name, item in baselines.items()
+        },
+    }
+    validation_metrics = {
+        "quantum": ClassificationMetricPair(
+            balanced_accuracy=quantum.candidate.validation_balanced_accuracy,
+            macro_f1=quantum.candidate.validation_macro_f1,
+        ),
+        **{
+            name: ClassificationMetricPair(
+                balanced_accuracy=item.validation_balanced_accuracy,
+                macro_f1=item.validation_macro_f1,
+            )
+            for name, item in baselines.items()
+        },
+    }
+    test_seconds = perf_counter() - test_started
+    class_balance = {
+        name: {
+            str(target): int(np.count_nonzero(labels == target))
+            for target in (-1, 1)
+        }
+        for name, labels in (
+            ("train", dataset.y_train),
+            ("validation", dataset.y_validation),
+            ("test", dataset.y_test),
+        )
+    }
     result = ReplicaResult(
         replica_index=replica_index,
+        base_seed=base_seed,
         seeds=seeds,
         split_sizes=SplitSizes(
             train=len(dataset.X_train),
             validation=len(dataset.X_validation),
             test=len(dataset.X_test),
         ),
+        split_identities={
+            "train": dataset.train_ids,
+            "validation": dataset.validation_ids,
+            "test": dataset.test_ids,
+        },
+        class_balance=class_balance,
         dataset_metadata=dataset.metadata,
         quantum_balanced_accuracy=quantum_score,
         baseline_balanced_accuracy=baseline_scores,
@@ -303,6 +414,24 @@ def _run_replica(
         ),
         kernel_diagnostics_by_checkpoint=quantum.diagnostics,
         selected_kernel_diagnostics=selected_diagnostics,
+        test_kernel_statistics={
+            "minimum": float(np.min(test_kernel)),
+            "maximum": float(np.max(test_kernel)),
+            "mean": float(np.mean(test_kernel)),
+            "standard_deviation": float(np.std(test_kernel)),
+        },
+        train_metrics=train_metrics,
+        validation_metrics=validation_metrics,
+        test_metrics=test_metrics,
+        runtime_seconds={
+            "dataset_generation": dataset_generation_seconds,
+            "training_and_selection": fit_seconds,
+            "test_evaluation": test_seconds,
+            "total": dataset_generation_seconds + (perf_counter() - replica_started),
+        },
+        source_hashes=_source_hashes(),
+        abstention_count=0,
+        failure=None,
         test_ledger_path=str(store.ledger_path),
     )
     store.publish_evaluation(result.model_dump(mode="json"))
@@ -332,7 +461,9 @@ def _run_replicas(
     replicas: list[ReplicaResult] = []
     for replica_index in range(n_replicas):
         seeds = _replica_seeds(base_seed, replica_index)
+        generation_started = perf_counter()
         dataset = dataset_factory(seeds.dataset, seeds.split)
+        generation_seconds = perf_counter() - generation_started
         replicas.append(
             _run_replica(
                 replica_index=replica_index,
@@ -341,6 +472,8 @@ def _run_replicas(
                 output_root=output_dir,
                 qng_steps=qng_steps,
                 permute_train_labels=permute_train_labels,
+                base_seed=base_seed,
+                dataset_generation_seconds=generation_seconds,
             )
         )
     aggregate = aggregate_replicas(

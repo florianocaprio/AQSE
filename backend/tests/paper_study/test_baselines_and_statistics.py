@@ -5,6 +5,7 @@ import pytest
 
 from app.paper_study.baselines import BASELINE_NAMES, fit_classical_comparators
 from app.paper_study.models import (
+    ClassificationMetricPair,
     KernelDiagnosticsResult,
     QuantumSelection,
     ReplicaResult,
@@ -24,9 +25,30 @@ def _replica(index: int, quantum: float, offset: float) -> ReplicaResult:
         trace=2.0,
         maximum_eigenvalue_trace_ratio=0.75,
         effective_rank=1.75,
+        minimum_eigenvalue=0.5,
+        maximum_eigenvalue=1.5,
+        diagonal_minimum=1.0,
+        diagonal_maximum=1.0,
+        diagonal_mean=1.0,
+        symmetry_max_abs_error=0.0,
+        off_diagonal_minimum=0.5,
+        off_diagonal_maximum=0.5,
+        off_diagonal_mean=0.5,
+        off_diagonal_standard_deviation=0.0,
+        positive_condition_number=3.0,
     )
+    metrics = {
+        "quantum": ClassificationMetricPair(
+            balanced_accuracy=quantum, macro_f1=quantum
+        ),
+        **{
+            name: ClassificationMetricPair(balanced_accuracy=score, macro_f1=score)
+            for name, score in baselines.items()
+        },
+    }
     return ReplicaResult(
         replica_index=index,
+        base_seed=1,
         seeds=ReplicaSeeds(
             replica=10 + index,
             dataset=20 + index,
@@ -36,6 +58,16 @@ def _replica(index: int, quantum: float, offset: float) -> ReplicaResult:
             permutation=60 + index,
         ),
         split_sizes=SplitSizes(train=12, validation=4, test=4),
+        split_identities={
+            "train": tuple(f"train-{item}" for item in range(12)),
+            "validation": tuple(f"validation-{item}" for item in range(4)),
+            "test": tuple(f"test-{item}" for item in range(4)),
+        },
+        class_balance={
+            "train": {"-1": 6, "1": 6},
+            "validation": {"-1": 2, "1": 2},
+            "test": {"-1": 2, "1": 2},
+        },
         dataset_metadata={"fixture": True},
         quantum_balanced_accuracy=quantum,
         baseline_balanced_accuracy=baselines,
@@ -50,6 +82,24 @@ def _replica(index: int, quantum: float, offset: float) -> ReplicaResult:
         ),
         kernel_diagnostics_by_checkpoint=(diagnostics,),
         selected_kernel_diagnostics=diagnostics,
+        test_kernel_statistics={
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "mean": 0.5,
+            "standard_deviation": 0.2,
+        },
+        train_metrics=metrics,
+        validation_metrics=metrics,
+        test_metrics=metrics,
+        runtime_seconds={
+            "dataset_generation": 1.0,
+            "training_and_selection": 2.0,
+            "test_evaluation": 0.5,
+            "total": 3.5,
+        },
+        source_hashes={"fixture": "0" * 64},
+        abstention_count=0,
+        failure=None,
         test_ledger_path=f"replica-{index}/ledger.jsonl",
     )
 

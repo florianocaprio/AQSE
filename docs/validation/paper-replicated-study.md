@@ -53,6 +53,11 @@ The following decisions were frozen on 2026-09-16, before launching the
   count was chosen after the four-replica stability pilot and before the primary
   study. It must not be reduced, extended, or rerun with replacement seeds in
   response to its observed accuracy or confidence intervals.
+- The positive mechanism-aligned control is fixed at **12 independent
+  replicas**, with base seed `3_003_001`. Each replica uses 200 independently
+  generated TQK-teacher examples before its frozen stratified split. This count
+  and seed were fixed before executing the scientific control and must not be
+  changed after inspecting any control result.
 - The primary replicated study is pre-registered at **30 independent replicas**.
   No interim result may change this count, its seed schedule, the declared
   methods, or the analysis. There is no performance-based early stopping. All
@@ -102,6 +107,14 @@ Across replicas, the implementation reports:
 - interval estimates for quantum and classical balanced accuracy;
 - interval estimates for selected-kernel diagnostics;
 - positive- and negative-control summaries when supplied.
+
+The pre-registered primary quantum-advantage comparison is quantum TQK versus
+RBF-SVC on TEST balanced accuracy across the 30 paired replicas. Evidence
+supports the criterion only if both conditions hold: the 95% bootstrap interval
+for the mean paired delta has a lower bound strictly greater than zero, and the
+two-sided paired Wilcoxon p-value is below 0.05. Macro-F1 and comparisons with
+MLP, RFF, and gradient boosting are secondary evidence and cannot rescue a
+failed primary criterion.
 
 The aggregate JSON uses native unrounded floating-point serialization. Every
 aggregate performance and diagnostic estimate is represented by a point,

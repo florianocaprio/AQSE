@@ -27,6 +27,8 @@ class FittedComparator:
     estimator: Any
     validation_balanced_accuracy: float
     validation_macro_f1: float
+    train_balanced_accuracy: float
+    train_macro_f1: float
     configuration: dict[str, Any]
 
     def predict(self, X: ArrayLike) -> NDArray[np.int8]:
@@ -65,14 +67,29 @@ def _score(
     validation: NDArray[np.float64],
     labels: NDArray[np.int8],
     configuration: dict[str, Any],
+    train: NDArray[np.float64],
+    train_labels: NDArray[np.int8],
 ) -> FittedComparator:
     predicted = np.asarray(estimator.predict(validation), dtype=np.int8)
+    train_predicted = np.asarray(estimator.predict(train), dtype=np.int8)
     return FittedComparator(
         name=name,
         estimator=estimator,
         validation_balanced_accuracy=float(balanced_accuracy_score(labels, predicted)),
         validation_macro_f1=float(
             f1_score(labels, predicted, labels=[-1, 1], average="macro", zero_division=0.0)
+        ),
+        train_balanced_accuracy=float(
+            balanced_accuracy_score(train_labels, train_predicted)
+        ),
+        train_macro_f1=float(
+            f1_score(
+                train_labels,
+                train_predicted,
+                labels=[-1, 1],
+                average="macro",
+                zero_division=0.0,
+            )
         ),
         configuration=configuration,
     )
@@ -118,6 +135,8 @@ def fit_classical_comparators(
                     validation,
                     validation_labels,
                     {"C": c_value, "gamma": gamma, "selection": "VALIDATION"},
+                    train,
+                    labels,
                 )
             )
     fitted["rbf_svc"] = min(
@@ -157,6 +176,8 @@ def fit_classical_comparators(
             "solver": "lbfgs",
             "alpha": 1.0e-3,
         },
+        train,
+        labels,
     )
 
     rff = Pipeline(
@@ -180,6 +201,8 @@ def fit_classical_comparators(
             "linear_svc_C": 1.0,
             "capacity_reference": "2**8 Hilbert-space dimension",
         },
+        train,
+        labels,
     )
 
     boosting = GradientBoostingClassifier(
@@ -198,6 +221,8 @@ def fit_classical_comparators(
             "learning_rate": 0.1,
             "max_depth": 3,
         },
+        train,
+        labels,
     )
     if tuple(fitted) != BASELINE_NAMES:
         raise RuntimeError("classical comparator set is incomplete or misordered")

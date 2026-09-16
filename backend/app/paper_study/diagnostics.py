@@ -34,9 +34,26 @@ def kernel_diagnostics(K: ArrayLike) -> KernelDiagnosticsResult:
         raise ValueError("kernel matrix has zero positive trace")
     probabilities = clipped[clipped > 0.0] / trace
     entropy = -float(np.sum(probabilities * np.log(probabilities)))
+    diagonal = np.diag(matrix)
+    off_diagonal = matrix[~np.eye(len(matrix), dtype=np.bool_)]
+    positive = clipped[clipped > 1.0e-12 * scale]
+    condition = None
+    if len(positive) > 1:
+        condition = float(positive[-1] / positive[0])
     return KernelDiagnosticsResult(
         eigenvalues=tuple(float(value) for value in clipped),
         trace=trace,
         maximum_eigenvalue_trace_ratio=float(clipped[-1] / trace),
         effective_rank=float(np.exp(entropy)),
+        minimum_eigenvalue=float(eigenvalues[0]),
+        maximum_eigenvalue=float(eigenvalues[-1]),
+        diagonal_minimum=float(np.min(diagonal)),
+        diagonal_maximum=float(np.max(diagonal)),
+        diagonal_mean=float(np.mean(diagonal)),
+        symmetry_max_abs_error=float(np.max(np.abs(matrix - matrix.T))),
+        off_diagonal_minimum=float(np.min(off_diagonal)),
+        off_diagonal_maximum=float(np.max(off_diagonal)),
+        off_diagonal_mean=float(np.mean(off_diagonal)),
+        off_diagonal_standard_deviation=float(np.std(off_diagonal)),
+        positive_condition_number=condition,
     )
