@@ -1,0 +1,24 @@
+{
+  "bootstrap_resamples": 2000,
+  "main": {
+    "base_seed": 3001001,
+    "replicas": 30
+  },
+  "negative_control": {
+    "base_seed": 3002001,
+    "dataset_seed": 3004001,
+    "dataset_size": 200,
+    "replicas": 12
+  },
+  "positive_control": {
+    "base_seed": 3003001,
+    "dataset_size_per_replica": 200,
+    "replicas": 12
+  },
+  "primary_advantage_criterion": "RBF-SVC paired TEST balanced-accuracy delta bootstrap lower bound > 0 and two-sided Wilcoxon p < 0.05",
+  "protocol_document_sha256": "db336a0c01880da07e44687a0d6ed937cd1eee4446a6d109b96c3b3f703768c4",
+  "qng_steps": 10,
+  "schema_version": "aqse.paper-execution-protocol.v1",
+  "source_commit": "091acf2e98b2b88720730eea276e253f0c96f5a6",
+  "timestamp_utc": "2026-09-16T08:36:58.214748+00:00"
+}
