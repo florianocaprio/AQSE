@@ -183,3 +183,36 @@ Completing the package is not scientific approval. The final conclusion remains
 limited to the preregistered paired TEST balanced-accuracy criterion in this
 synthetic exact-state simulator domain; it is not a QPU-compute or field-sensor
 advantage claim.
+
+### Completed recovery record
+
+The canonical recovered package was produced as
+`execution-091acf2e98b2-3001001-report-recovery-v2` using reporting commit
+`d42965ef6a38791fcdbdc1b7bbb3750a58d1f2f1`. Its manifest SHA-256 is
+`e04f59400333668f9dfd277e85af83660873ff786f11d380fad39eb862224474`.
+The second invocation verified and reused the package without rewriting it.
+The before/after inventories contain the same 335 source files with identical
+byte counts and SHA-256 values, including all 54 unchanged four-event ledgers.
+
+An earlier packaging-only directory ending in `report-recovery-v1` is retained
+as non-canonical evidence of an operator provenance-entry error: its reporting
+commit contains the correct short prefix followed by zero padding rather than
+the full Git SHA. It must not be cited or used as the scientific report. No
+source evidence was changed, and no scientific operation was repeated while
+producing either package.
+
+The primary main-study result is quantum-minus-RBF-SVC TEST balanced accuracy
+`-0.004166666666666652`, with 95% bootstrap interval
+`[-0.022222222222222192, 0.012500000000000015]` and two-sided paired Wilcoxon
+`p=0.932805434372276`. It therefore does not satisfy either required direction
+and significance combination. The preregistered conclusion is: **the evidence
+does not support the quantum-advantage criterion**.
+
+The negative control is not fully chance-compatible: the 95% intervals for the
+quantum and RBF-SVC methods exclude 0.5, while those for MLP, RFF, and gradient
+boosting contain 0.5. This failed sanity check remains visible and limits causal
+interpretation; it was not rerun. The mechanism-aligned positive control gives
+quantum balanced accuracy `0.9812500000000001` with interval
+`[0.9625, 0.9958333333333332]`, but its quantum-minus-RBF-SVC interval includes
+zero and Wilcoxon `p=1.0`. This control is a software/mechanism check only and
+cannot establish sensor-field or QPU advantage.
