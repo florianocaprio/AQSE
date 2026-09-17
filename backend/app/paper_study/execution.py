@@ -32,6 +32,13 @@ POSITIVE_BASE_SEED = 3_003_001
 CONTROL_DATASET_SIZE = 200
 CONTROL_DATASET_SEED = 3_004_001
 BOOTSTRAP_RESAMPLES = 2_000
+METHOD_ORDER = (
+    "quantum",
+    "rbf_svc",
+    "mlp_11_parameter",
+    "rff_256",
+    "gradient_boosting",
+)
 
 
 def _write_json(path: Path, value: Any) -> None:
@@ -63,7 +70,9 @@ def _interval(values: Sequence[float], *, seed: int) -> dict[str, Any]:
 
 
 def _method_statistics(study: ReplicatedStudyResult) -> dict[str, Any]:
-    methods = tuple(study.replicas[0].test_metrics)
+    methods = METHOD_ORDER
+    if set(study.replicas[0].test_metrics) != set(methods):
+        raise ValueError("stored TEST methods do not match the frozen method order")
     result: dict[str, Any] = {}
     for method_index, method in enumerate(methods):
         result[method] = {}
@@ -91,7 +100,9 @@ def _paired_statistics(study: ReplicatedStudyResult) -> dict[str, Any]:
         for metric in ("balanced_accuracy", "macro_f1")
     }
     result: dict[str, Any] = {}
-    baselines = tuple(name for name in study.replicas[0].test_metrics if name != "quantum")
+    baselines = METHOD_ORDER[1:]
+    if set(study.replicas[0].test_metrics) != set(METHOD_ORDER):
+        raise ValueError("stored TEST methods do not match the frozen method order")
     for baseline_index, baseline in enumerate(baselines):
         result[baseline] = {}
         for metric_index, metric in enumerate(("balanced_accuracy", "macro_f1")):
@@ -166,6 +177,19 @@ def _kernel_rows(study: ReplicatedStudyResult) -> list[dict[str, Any]]:
                 }
             )
     return rows
+
+
+def _kernel_aggregate_payload(study: ReplicatedStudyResult) -> dict[str, Any]:
+    """Return JSON-native intervals without changing any statistical value.
+
+    This is only a serialization boundary.  It does not recompute diagnostics,
+    alter bootstrap estimates, or provide additional scientific evidence.
+    """
+
+    return {
+        name: interval.model_dump(mode="json")
+        for name, interval in study.aggregate.selected_kernel_diagnostics.items()
+    }
 
 
 def _manifest(root: Path, names: Sequence[str]) -> dict[str, Any]:
@@ -281,7 +305,7 @@ def execute_preregistered_study(
     aggregate = {
         "method_statistics": _method_statistics(main),
         "paired_statistics": _paired_statistics(main),
-        "kernel_aggregate": main.aggregate.selected_kernel_diagnostics,
+        "kernel_aggregate": _kernel_aggregate_payload(main),
     }
     _write_json(root / "aggregate_statistics.json", aggregate)
     aggregate_rows = []

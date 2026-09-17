@@ -141,3 +141,45 @@ write_aggregate_report(
 
 An existing output directory is rejected. A partially opened or completed TEST
 ledger cannot be reused as permission to rerun a replica.
+
+## Report-recovery incident and procedure
+
+The preregistered execution at experiment commit
+`091acf2e98b2b88720730eea276e253f0c96f5a6` completed 30 main replicas,
+12 negative-control replicas, and 12 positive-control replicas. Each of the 54
+replicas published its result and closed its four-event TEST ledger. The process
+then failed while writing the root aggregate report because
+`selected_kernel_diagnostics` still contained nested Pydantic
+`IntervalEstimate` objects at the `json.dumps` boundary.
+
+This was a reporting defect, not a scientific-execution failure. The correction
+converts those interval models with `model_dump(mode="json")`; it does not alter
+`IntervalEstimate`, statistical formulae, seeds, precision, or the protected
+TQK8/QNG implementation. The original execution directory remains immutable.
+
+The dedicated recovery command validates all stored `aggregate.json` and
+`result.json` files, exact replica indices, source identity, byte hashes, ledger
+chains, and environment versions. It hashes TEST `.npy` files as opaque bytes;
+it never deserializes observations or labels and cannot invoke dataset
+generation, fitting, prediction, TEST loaders, or evaluation publication. It
+publishes through a staging directory into a separate sibling output and is
+idempotent after the completion marker is present.
+
+The reproducible command is:
+
+```bash
+python -m scripts.finalize_paper_replicated_study \
+  --source /source/execution-091acf2e98b2-3001001 \
+  --output /output/execution-091acf2e98b2-3001001-report-recovery-v1 \
+  --reporting-source-commit <full-corrective-commit-sha>
+```
+
+The container invocation must mount `/source` read-only and a distinct
+`/output` path read-write. The report records the experiment commit separately
+from the later reporting commit. Saved per-replica runtime sums are reported as
+such; the unavailable original wall-clock duration is not reconstructed.
+
+Completing the package is not scientific approval. The final conclusion remains
+limited to the preregistered paired TEST balanced-accuracy criterion in this
+synthetic exact-state simulator domain; it is not a QPU-compute or field-sensor
+advantage claim.
