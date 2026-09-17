@@ -1,0 +1,42 @@
+{
+  "copied_byte_identical": [
+    "protocol_snapshot.json",
+    "environment.json",
+    "replicas.csv",
+    "replicas.json",
+    "kernel_diagnostics.csv",
+    "kernel_diagnostics.json",
+    "negative_control.json",
+    "positive_control.json"
+  ],
+  "experiment_source_commit": "091acf2e98b2b88720730eea276e253f0c96f5a6",
+  "input_file_count": 335,
+  "output_directory": "/evidence/execution-091acf2e98b2-3001001-report-recovery-v2",
+  "produced_first_time": [
+    "aggregate_statistics.json",
+    "aggregate_statistics.csv",
+    "final_report.json",
+    "final_report.md",
+    "manifest.json",
+    "recovery_record.json",
+    "source_inventory.json"
+  ],
+  "recovered_at_utc": "2026-09-17T15:08:56.722822+00:00",
+  "recovery_seconds": 0.2710889579029754,
+  "replicas_recovered": {
+    "main": 30,
+    "negative_control": 12,
+    "positive_control": 12
+  },
+  "reporting_source_commit": "d42965ef6a38791fcdbdc1b7bbb3750a58d1f2f1",
+  "schema_version": "aqse.paper-report-recovery-record.v1",
+  "scientific_operations": {
+    "dataset_generation": 0,
+    "new_replicas": 0,
+    "predictions": 0,
+    "test_label_opens": 0,
+    "test_observation_opens": 0,
+    "training": 0
+  },
+  "source_directory": "/evidence/execution-091acf2e98b2-3001001"
+}
